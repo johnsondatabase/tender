@@ -279,7 +279,6 @@ function injectSettingsUI() {
                     🔑 Cài đặt API Key
                 </h3>
                 <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                    Nhập Gemini API Key của riêng bạn để tránh bị giới hạn lượt chat (Quota Limit).
                 </p>
                 
                 <div class="space-y-3">
