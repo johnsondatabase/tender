@@ -145,6 +145,9 @@ export function initChatbot() {
     toggleBtn.style.display = 'flex';     
     toggleBtn.style.zIndex = '9999';      
     
+    // Đảm bảo cửa sổ chat đè lên nút toggle (z-index cao hơn)
+    chatWindow.style.zIndex = '10000';
+
     // === FIX 1: Giảm kích thước trên mobile (w-12 h-12) và giữ nguyên desktop (md:w-16 md:h-16) ===
     toggleBtn.className = "fixed bottom-6 right-6 p-0 w-12 h-12 md:w-16 md:h-16 bg-[#9333ea] hover:bg-[#7e22ce] rounded-full shadow-2xl hover:scale-105 transition-transform flex items-center justify-center cursor-pointer border-2 border-white";
     toggleBtn.innerHTML = `
@@ -156,9 +159,6 @@ export function initChatbot() {
             </span>
         </div>
     `;
-
-    // Đảm bảo cửa sổ chat không bị tràn màn hình trên mobile
-    chatWindow.classList.add("max-w-[95vw]"); 
 
     // 2. Kéo thả LIÊN KẾT (Cửa sổ và Nút dính nhau)
     makeElementDraggable(toggleBtn, { isToggle: true, linkedEl: chatWindow });
@@ -374,6 +374,9 @@ function initResizableTopLeft(el) {
     let startX, startY, startWidth, startHeight, startLeft, startTop;
 
     const onMouseDown = (e) => {
+        // Tắt tính năng resize trên Mobile để tránh lỗi
+        if (window.innerWidth < 768) return;
+
         e.stopPropagation();
         e.preventDefault();
 
@@ -458,6 +461,10 @@ function makeElementDraggable(el, options = {}) {
     const chatWindow = document.getElementById('chatbot-window');
 
     const onMouseDown = (e) => {
+        // === QUAN TRỌNG: Tắt kéo thả cửa sổ chat trên mobile ===
+        // Lý do: Để cửa sổ cố định ở đáy, tránh việc tính toán lại vị trí làm văng cửa sổ khi bàn phím bật lên
+        if (options.isWindow && window.innerWidth < 768) return;
+
         if (e.button !== 0 && e.type !== 'touchstart') return;
 
         // Logic riêng cho Window: Chỉ kéo khi nắm vào Header
@@ -583,31 +590,38 @@ function makeElementDraggable(el, options = {}) {
     el.addEventListener('touchstart', onMouseDown, { passive: false });
 }
 
-// === FIX 2: Cập nhật hàm căn vị trí để không bị ẩn trên mobile ===
+// === FIX 2: Cập nhật hàm căn vị trí để KHÔNG BỊ ẨN KHI BẬT BÀN PHÍM ===
 function alignChatWindowToButton(btn, win) {
     const winW = window.innerWidth;
     const winH = window.innerHeight;
     
-    // Nếu là Mobile (< 768px): Căn giữa màn hình thay vì căn theo nút
+    // === MOBILE (< 768px): CHẾ ĐỘ "BOTTOM SHEET" ===
     if (winW < 768) {
-        // Reset style để đảm bảo nó hiển thị đúng
+        // Thay vì căn giữa (center), ta sẽ ghim chặt xuống đáy màn hình (bottom: 0)
+        // và reset top thành 'auto'. Khi bàn phím bật lên, viewport nhỏ lại,
+        // bottom: 0 sẽ tự đẩy cửa sổ lên theo bàn phím, không bị che.
         win.style.position = 'fixed';
-        win.style.bottom = 'auto';
-        win.style.right = 'auto';
+        win.style.top = 'auto'; // QUAN TRỌNG: Reset top để không bị cố định vị trí cũ
+        win.style.bottom = '0'; // Ghim đáy
+        win.style.left = '0';
+        win.style.right = '0';
         
-        // Tính toán để căn giữa
-        const winRect = win.getBoundingClientRect(); // Lấy kích thước thật sau khi remove hidden
-        const left = (winW - winRect.width) / 2;
-        const top = (winH - winRect.height) / 2;
+        // Kích thước full ngang, cao 85% màn hình
+        win.style.width = '100%';
+        win.style.height = '85vh'; 
+        win.style.maxHeight = '100%';
         
-        // Đảm bảo không bị âm (tràn lên trên)
-        win.style.left = `${Math.max(10, left)}px`;
-        win.style.top = `${Math.max(10, top)}px`;
-        
+        // Bo tròn góc trên cho đẹp
+        win.style.borderRadius = '16px 16px 0 0';
+        win.style.margin = '0';
+        win.style.transform = 'none'; // Xóa transform nếu có
+
+        // Đảm bảo z-index cao nhất
+        win.style.zIndex = '10000';
         return;
     }
 
-    // Nếu là Desktop: Giữ nguyên logic cũ (Bong bóng lời thoại)
+    // === DESKTOP: GIỮ NGUYÊN LOGIC CŨ ===
     const btnRect = btn.getBoundingClientRect();
     const winRect = win.getBoundingClientRect();
     
@@ -625,6 +639,9 @@ function alignChatWindowToButton(btn, win) {
     win.style.right = 'auto';
     win.style.top = newTop + 'px';
     win.style.left = newLeft + 'px';
+    win.style.width = ''; // Reset width trên desktop
+    win.style.height = ''; // Reset height trên desktop
+    win.style.borderRadius = ''; // Reset border radius
 }
 
 function handleImageSelect(file) {
