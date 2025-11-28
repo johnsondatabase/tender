@@ -660,11 +660,10 @@ function handleImageSelect(file) {
 
 function renderSuggestions() {
     const suggestions = [
-        "Doanh số toàn công ty",
+        "Doanh số toàn bộ phận",
         "Hiệu suất của các PSR",
         "Hồ sơ nào sắp hết hạn?",
-        "Lê Văn C bán các sản phẩm nào, tỉ lệ thắng bao nhiêu?",
-        "Sản phẩm VT-003"
+        "Các sản phẩm nào dự thầu cao tỉ lệ thắng bao nhiêu?"
     ];
     const container = document.getElementById('chatbot-suggestions');
     if(container) {
