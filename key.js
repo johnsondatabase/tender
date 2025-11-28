@@ -1,0 +1,2 @@
+URL : "https://pptwtkcnxnnuybeqwpuw.supabase.co"
+KEY : "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwdHd0a2NueG5udXliZXF3cHV3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjM2NDY4NDMsImV4cCI6MjA3OTIyMjg0M30.Fe2quguQhgnPc14r4GRg3j6vqUtVZ5IuSpAwow6Ih8c"

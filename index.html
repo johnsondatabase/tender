@@ -1,0 +1,931 @@
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Hồ Sơ Thầu</title>
+    <link rel="icon" type="image/png" href="https://images.seeklogo.com/logo-png/50/1/johnson-johnson-logo-png_seeklogo-500414.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: 'var(--primary-color)',
+                    },
+                    animation: {
+                        'fade-in-up': 'fadeInUp 0.3s ease-out',
+                        'bounce-slight': 'bounceSlight 2s infinite',
+                    },
+                    keyframes: {
+                        fadeInUp: {
+                            '0%': { opacity: '0', transform: 'translateY(10px) scale(0.95)' },
+                            '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+                        },
+                        bounceSlight: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-5px)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script> <!-- Added Marked for Markdown rendering -->
+    
+    <!-- Handsontable CSS/JS -->
+    <link href="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/handsontable/dist/handsontable.full.min.js"></script>
+
+    <style>
+        :root {
+            --primary-color: #2563eb; 
+            --primary-hover: #1d4ed8;
+            --primary-bg-light: #eff6ff; 
+        }
+        /* Utility classes using CSS Variables */
+        .text-primary { color: var(--primary-color) !important; }
+        .bg-primary { background-color: var(--primary-color) !important; }
+        .bg-primary-light { background-color: var(--primary-bg-light) !important; }
+        .hover-bg-primary:hover { background-color: var(--primary-color) !important; }
+        .hover-text-primary:hover { color: var(--primary-color) !important; }
+        .border-primary { border-color: var(--primary-color) !important; }
+        .ring-primary { --tw-ring-color: var(--primary-color) !important; }
+        
+        /* Dark Mode Overrides */
+        html.dark body { background-color: #202124; color: #e8eaed; }
+        html.dark .bg-white { background-color: #303134 !important; color: #e8eaed; border-color: #5f6368; }
+        html.dark .bg-gray-50 { background-color: #202124 !important; }
+        html.dark .bg-gray-100 { background-color: #3c4043 !important; }
+        html.dark .bg-gray-900 { background-color: #2d2e31 !important; }
+        html.dark .text-gray-900, html.dark .text-gray-800 { color: #ffffff !important; }
+        html.dark .text-gray-700 { color: #e8eaed !important; }
+        html.dark .text-gray-600, html.dark .text-gray-500 { color: #bdc1c6 !important; }
+        html.dark .border-gray-200, html.dark .border-gray-100, html.dark .border-gray-300 { border-color: #5f6368 !important; }
+        html.dark .divide-gray-100 > * + * { border-color: #5f6368 !important; }
+        html.dark input, html.dark select { background-color: #3c4043; border-color: #5f6368; color: white; }
+        html.dark input:focus, html.dark select:focus { border-color: #8ab4f8; }
+        html.dark #sidebar { background-color: #2d2e31; border-right: 1px solid #5f6368; }
+        html.dark #mobile-bottom-nav { background-color: #303134; border-top-color: #5f6368; }
+        html.dark #main-header { background-color: #303134 !important; border-bottom-color: #5f6368; }
+        html.dark .nav-button:hover { background-color: #3c4043; }
+        html.dark .settings-row:hover { background-color: #3c4043; }
+        html.dark .bg-primary-light { background-color: rgba(138, 180, 248, 0.1) !important; color: #8ab4f8 !important; }
+        html.dark .text-primary { color: #8ab4f8 !important; } 
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .modal-backdrop { background-color: rgba(0, 0, 0, 0.6); }
+        
+        .nav-button.active { color: var(--primary-color); }
+        html.dark .nav-button.active { color: #8ab4f8; }
+        .nav-button.active .nav-indicator { background-color: var(--primary-bg-light); }
+        html.dark .nav-button.active .nav-indicator { background-color: rgba(138, 180, 248, 0.2); }
+        
+        @media (min-width: 768px) {
+            .nav-button.active { background-color: #3c4043; color: #e8eaed; }
+            .nav-button.active .nav-indicator { background-color: transparent; }
+            html.dark .nav-button.active { background-color: #3c4043; color: #ffffff; }
+        }
+
+        button, .nav-button, .cursor-pointer { transition: all 0.2s ease-in-out; }
+        button:not(:disabled):active, .nav-button:active { transform: scale(0.97); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        
+        #toast-container { position: fixed; top: 1.5rem; right: 1.5rem; z-index: 100000; display: flex; flex-direction: column; gap: 0.75rem; }
+        .toast { display: flex; align-items: center; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); color: white; opacity: 0; transform: translateX(100%); transition: all 0.3s ease-in-out; }
+        .toast.show { opacity: 1; transform: translateX(0); }
+        .toast.hide { opacity: 0; transform: translateX(100%); }
+        .toast-success { background-color: #28a745; }
+        .toast-error { background-color: #dc3545; }
+        .toast-info { background-color: #17a2b8; }
+
+        @keyframes loading-bar-flow { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+        .animate-loading-bar-flow { width: 100%; position: absolute; animation: loading-bar-flow 1.5s infinite linear; }
+        #loading-bar { background-color: #93c5fd; overflow: hidden; }
+        
+        .bottom-nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.7rem; padding: 0.5rem 0; }
+        .bottom-nav-item svg { margin-bottom: 2px; }
+        
+        .settings-row { display: flex; align-items: center; justify-content: space-between; padding: 1rem; border-bottom: 1px solid #f3f4f6; cursor: pointer; }
+        html.dark .settings-row { border-bottom-color: #5f6368; }
+        .settings-row-icon { display: flex; align-items: center; gap: 0.75rem; }
+        
+        /* Flag styles */
+        .lang-flag { transition: all 0.2s; }
+        
+        /* Notification styles */
+        .notification-dropdown {
+            animation: slideDown 0.2s ease-out;
+            transform-origin: top right;
+        }
+        @keyframes slideDown {
+            from { opacity: 0; transform: scaleY(0.95); }
+            to { opacity: 1; transform: scaleY(1); }
+        }
+        
+        /* Custom Scrollbar */
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; }
+        .custom-scrollbar:hover::-webkit-scrollbar-thumb { background: #94a3b8; }
+
+        /* Custom Autocomplete Dropdown */
+        .custom-dropdown-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background-color: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            max-height: 160px; /* ~5 items (32px each) */
+            overflow-y: auto;
+            z-index: 50;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            display: none;
+        }
+        html.dark .custom-dropdown-list {
+            background-color: #374151;
+            border-color: #4b5563;
+        }
+        .custom-dropdown-list.show { display: block; }
+        .custom-dropdown-item {
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            font-size: 0.875rem;
+        }
+        .custom-dropdown-item:hover {
+            background-color: #f3f4f6;
+        }
+        html.dark .custom-dropdown-item:hover {
+            background-color: #4b5563;
+        }
+
+        /* Resize Handle */
+        .resizer {
+            position: absolute;
+            right: 0;
+            bottom: 0;
+            width: 15px;
+            height: 15px;
+            cursor: se-resize;
+            background: linear-gradient(135deg, transparent 50%, #9ca3af 50%);
+            border-bottom-right-radius: 0.75rem;
+            z-index: 20;
+        }
+
+        /* Multi-select Dropdown Filter Styles */
+        .multi-select-container { position: relative; width: 100%; }
+        .multi-select-btn { 
+            width: 100%; 
+            text-align: left; 
+            padding: 0.375rem 0.75rem; 
+            border: 1px solid #d1d5db; /* Distinct Border */
+            border-radius: 0.375rem; 
+            background-color: white; 
+            font-size: 0.875rem; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            transition: border-color 0.2s;
+        }
+        .multi-select-btn:hover { border-color: var(--primary-color); }
+        html.dark .multi-select-btn { background-color: #374151; border-color: #4b5563; color: white; }
+        
+        .multi-select-dropdown {
+            position: absolute;
+            top: 100%; left: 0; right: 0;
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+            z-index: 50;
+            margin-top: 4px;
+            display: none;
+            overflow: hidden;
+            max-height: 250px;
+            display: none;
+            flex-direction: column;
+        }
+        html.dark .multi-select-dropdown { background: #374151; border-color: #4b5563; }
+        .multi-select-dropdown.open { display: flex; }
+        
+        .multi-select-search {
+            padding: 0.5rem;
+            border-bottom: 1px solid #f3f4f6;
+            background-color: #f9fafb;
+        }
+        html.dark .multi-select-search { border-bottom-color: #4b5563; background-color: #374151; }
+        
+        .multi-select-options {
+            overflow-y: auto;
+            flex: 1;
+        }
+        
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            padding: 0.5rem 0.75rem;
+            cursor: pointer;
+            transition: background-color 0.15s;
+        }
+        .checkbox-item:hover { background-color: #f3f4f6; }
+        html.dark .checkbox-item:hover { background-color: #4b5563; }
+        .checkbox-item input { margin-right: 0.5rem; cursor: pointer; }
+        
+        /* Filter Button States */
+        .btn-filter-active {
+            border-color: #ef4444 !important;
+            color: #ef4444 !important;
+            background-color: #fef2f2 !important;
+        }
+        html.dark .btn-filter-active {
+             background-color: rgba(239, 68, 68, 0.1) !important;
+        }
+        
+        /* Handsontable Overrides for Dark Mode & Aesthetics */
+        .handsontable { font-family: 'Times New Roman', serif; font-size: 0.95rem; }
+        .handsontable th { background-color: #f3f4f6; font-weight: 600; color: #374151; }
+        .handsontable td { color: #374151; }
+        
+        @media (max-width: 768px) {
+            .handsontable { font-size: 0.75rem !important; }
+            .handsontable th, .handsontable td { line-height: 1.2; padding: 2px !important; }
+        }
+
+        html.dark .handsontable th { background-color: #374151; color: #e5e7eb; border-color: #4b5563; }
+        html.dark .handsontable td { background-color: #1f2937; color: #e5e7eb; border-color: #4b5563; }
+        html.dark .handsontable tr:first-child th, html.dark .handsontable tr:first-child td { border-top-color: #4b5563; }
+        html.dark .handsontable th:first-child, html.dark .handsontable td:first-child { border-left-color: #4b5563; }
+        html.dark .ht_clone_top th { background-color: #374151; }
+        html.dark .ht_master tr:nth-of-type(even) > td { background-color: #27303f; }
+        
+        /* Handsontable Dropdown/Filter Menu Dark Mode Overrides */
+        html.dark .htMenu, 
+        html.dark .htDropdownMenu {
+            background-color: #374151 !important;
+            border-color: #4b5563 !important;
+            color: #e5e7eb !important;
+        }
+        html.dark .htMenu table tbody tr td,
+        html.dark .htDropdownMenu table tbody tr td {
+            background-color: #374151 !important;
+            color: #e5e7eb !important;
+        }
+        html.dark .htMenu table tbody tr td.htOption:hover,
+        html.dark .htMenu table tbody tr td.htOption.current,
+        html.dark .htDropdownMenu table tbody tr td.htOption:hover {
+            background-color: #4b5563 !important;
+            color: white !important;
+        }
+        html.dark .handsontable .htUISelect {
+            background-color: #1f2937 !important;
+            color: #e5e7eb !important;
+            border-color: #4b5563 !important;
+        }
+        html.dark .handsontable .htUIInput {
+            background-color: #1f2937 !important;
+            color: #e5e7eb !important;
+            border-color: #4b5563 !important;
+        }
+        html.dark .htFiltersConditionsMenu .htUISelect, 
+        html.dark .htFiltersConditionsMenu .htUIInput {
+            border-color: #6b7280 !important;
+        }
+        html.dark .htFiltersMenuLabel {
+            background-color: transparent !important;
+            color: #e5e7eb !important;
+        }
+        html.dark .htFiltersMenuCondition .htUISelect {
+            background-color: #1f2937 !important;
+        }
+        html.dark .htFiltersMenuValue .htUIInput {
+            background-color: #1f2937 !important;
+        }
+        html.dark .htFiltersMenuActionBar {
+            background-color: #374151 !important;
+            border-top: 1px solid #4b5563 !important;
+        }
+        html.dark .htUIBtn {
+            background-color: #4b5563 !important;
+            color: white !important;
+            border-color: #6b7280 !important;
+        }
+        html.dark .htUIBtn:hover {
+            background-color: #6b7280 !important;
+        }
+
+        .pin-active { color: #2563eb; }
+        html.dark .pin-active { color: #60a5fa; }
+        .htLeft { text-align: left !important; }
+        .htCenter { text-align: center !important; }
+        .htRight { text-align: right !important; }
+
+        .filters-hidden .changeType { display: none !important; }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 24px;
+            bottom: -16px;
+            width: 2px;
+            background-color: #e5e7eb;
+        }
+        html.dark .timeline-item::before {
+            background-color: #4b5563;
+        }
+        .timeline-item:last-child::before {
+            display: none;
+        }
+
+        .no-spinner::-webkit-outer-spin-button,
+        .no-spinner::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        .no-spinner {
+          -moz-appearance: textfield;
+        }
+
+        /* Markdown Styles for Chat */
+        .prose p { margin-bottom: 0.5em; }
+        .prose ul { list-style-type: disc; padding-left: 1.25em; margin-bottom: 0.5em; }
+        .prose ol { list-style-type: decimal; padding-left: 1.25em; margin-bottom: 0.5em; }
+        .prose strong { font-weight: 700; color: inherit; }
+        .prose a { color: #3b82f6; text-decoration: underline; }
+        .dark .prose a { color: #60a5fa; }
+
+        /* Chatbot Draggable */
+        #chatbot-toggle-btn {
+            touch-action: none;
+            cursor: grab;
+        }
+        #chatbot-toggle-btn:active {
+            cursor: grabbing;
+        }
+        #chatbot-window {
+            /* Keep window fixed at bottom right by default, but allow JS to toggle classes */
+        }
+
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.30.0"
+  }
+}
+</script>
+</head>
+<body class="bg-gray-50 font-sans antialiased h-screen overflow-hidden flex flex-col">
+
+    <div id="loading-bar" class="fixed top-0 left-0 right-0 h-1 z-[9999] hidden">
+        <div class="h-full bg-primary animate-loading-bar-flow"></div>
+    </div>
+
+    <div id="toast-container"></div>
+
+    <div id="app-loading" class="flex items-center justify-center h-screen w-full bg-white z-50 fixed inset-0">
+        <div class="text-center">
+            <svg class="animate-spin h-10 w-10 text-primary mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="mt-2 text-gray-600" data-i18n="loading">Đang tải ứng dụng...</p>
+        </div>
+    </div>
+
+    <div id="main-app" class="hidden h-full flex flex-col md:flex-row">
+        
+        <!-- Desktop Sidebar -->
+        <div id="sidebar" class="hidden md:flex md:w-64 bg-gray-900 text-gray-200 flex-col h-full shadow-xl transition-all duration-300 z-30">
+            <div id="sidebar-header-content" class="flex items-center justify-between p-4 border-b border-gray-700 flex-shrink-0">
+                 <div id="user-details" class="flex items-center gap-3">
+                    <div class="relative flex-shrink-0">
+                        <img id="sidebar-avatar" src="" alt="Avatar" class="w-10 h-10 rounded-full object-cover border-2 border-gray-600">
+                        <span id="sidebar-avatar-status" class="absolute -bottom-0.5 -right-0.5 block h-3 w-3 rounded-full bg-gray-400 ring-2 ring-gray-900"></span>
+                    </div>
+                    <div id="user-info-text">
+                        <span class="font-semibold text-base truncate max-w-[120px] block" id="user-ho-ten">...</span>
+                        <span class="text-xs text-gray-400 block truncate max-w-[120px]" id="user-gmail">...</span>
+                    </div>
+                </div>
+                <button id="sidebar-toggle-btn" class="p-2 rounded-full hover:bg-gray-700 hidden md:block">
+                    <svg id="sidebar-toggle-icon-close" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"></path></svg>
+                    <svg id="sidebar-toggle-icon-open" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"></path></svg>
+                </button>
+            </div>
+
+            <nav class="mt-4 flex-grow overflow-y-auto no-scrollbar">
+                <!-- 1. Dashboard -->
+                <button data-view="view-phat-trien" class="nav-button w-full flex items-center px-6 py-3 text-gray-400 hover:bg-gray-700 active">
+                    <svg class="w-6 h-6 mr-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg>
+                    <span class="nav-text transition-opacity duration-300" data-i18n="nav_dashboard">Tổng quan</span>
+                </button>
+                
+                <!-- 2. Listing -->
+                <button data-view="view-ton-kho" class="nav-button w-full flex items-center px-6 py-3 text-gray-400 hover:bg-gray-700">
+                    <svg class="w-6 h-6 mr-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                    <span class="nav-text transition-opacity duration-300" data-i18n="nav_listing">Kho hàng</span>
+                </button>
+
+                <!-- 3. Detail -->
+                <button data-view="view-chi-tiet" class="nav-button w-full flex items-center px-6 py-3 text-gray-400 hover:bg-gray-700">
+                    <svg class="w-6 h-6 mr-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                    <span class="nav-text transition-opacity duration-300" data-i18n="nav_detail">Chi tiết</span>
+                </button>
+
+                <!-- 4. Product -->
+                <button data-view="view-san-pham" class="nav-button w-full flex items-center px-6 py-3 text-gray-400 hover:bg-gray-700">
+                    <svg class="w-6 h-6 mr-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                    <span class="nav-text transition-opacity duration-300" data-i18n="nav_product">Sản phẩm</span>
+                </button>
+                
+                <!-- 5. Setting -->
+                <button data-view="view-cai-dat" class="nav-button w-full flex items-center px-6 py-3 text-gray-400 hover:bg-gray-700">
+                     <svg class="w-6 h-6 mr-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0 3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826 3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path></svg>
+                    <span class="nav-text transition-opacity duration-300" data-i18n="nav_setting">Cài đặt</span>
+                </button>
+            </nav>
+            
+            <!-- Sidebar Footer Info -->
+            <div class="px-6 py-4 border-t border-gray-700">
+                <h3 class="flex items-center text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 nav-text transition-opacity duration-300">
+                    <span data-i18n="nav_online">Online</span> (<span id="online-user-count">0</span>)
+                </h3>
+                <div id="online-users-list-container" class="max-h-32 overflow-y-auto no-scrollbar -ml-2">
+                    <ul id="online-users-list" class="space-y-2"></ul>
+                </div>
+            </div>
+            <div id="sidebar-footer" class="p-4 text-center text-xs text-gray-400 flex-shrink-0 transition-opacity duration-300">
+                <p class="font-semibold">Version 1.0</p>
+            </div>
+        </div>
+
+        <!-- Main Content Area -->
+        <div id="main-content-area" class="relative flex-1 flex flex-col bg-gray-100 w-full h-full overflow-hidden">
+            <!-- Sticky Header -->
+            <div id="main-header" class="flex-shrink-0 bg-white border-b shadow-sm px-4 py-3 flex justify-between items-center gap-4 z-[300]">
+                <div class="flex items-center gap-2 overflow-hidden">
+                    <h1 id="view-title" class="text-lg md:text-xl font-bold text-gray-800 dark:text-white truncate" data-i18n="header_dashboard">Dashboard</h1>
+                    <div id="network-status-indicator" class="flex items-center gap-1 ml-2">
+                        <svg id="wifi-icon" class="w-4 h-4 md:w-5 md:h-5 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <g id="wifi-offline-group" class="hidden"><line x1="1" y1="1" x2="23" y2="23"></line><path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.28"></path><path d="M5 12.28A10.94 10.94 0 0 1 7.28 11.06"></path><line x1="23" y1="1" x2="1" y2="23"></line></g>
+                            <g id="wifi-online-group"><path id="wifi-bar-3" d="M1.42 9a16 16 0 0 1 21.16 0"></path><path id="wifi-bar-2" d="M5 12.55a11 11 0 0 1 14.08 0"></path><path id="wifi-bar-1" d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line id="wifi-dot" x1="12" y1="20" x2="12.01" y2="20"></line></g>
+                        </svg>
+                        <span id="latency-text" class="text-[10px] md:text-xs font-mono text-gray-500 min-w-[30px] text-right hidden sm:inline">-- ms</span>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-3">
+                     <!-- Notification Bell -->
+                     <div class="relative" id="notification-wrapper">
+                        <button id="btn-notification" class="p-2 rounded-full hover:bg-gray-100 text-gray-600 dark:text-gray-300 relative focus:outline-none">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+                            <span id="notification-badge" class="absolute top-1 right-1 bg-red-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center hidden notification-badge-target">0</span>
+                        </button>
+                        <!-- Notification Dropdown -->
+                        <div id="notification-dropdown" class="hidden absolute right-0 mt-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-[99999] notification-dropdown overflow-hidden">
+                            <div class="p-3 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700">
+                                <h3 class="text-sm font-semibold text-gray-700 dark:text-gray-200">Thông báo</h3>
+                                <button id="btn-mark-read-all" class="text-xs text-primary hover:underline">Đánh dấu đã đọc</button>
+                            </div>
+                            <div id="notification-list" class="max-h-80 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700 notification-list-target">
+                                <!-- Items injected by JS -->
+                                <div class="p-4 text-center text-gray-500 text-xs">Không có thông báo mới</div>
+                            </div>
+                        </div>
+                     </div>
+
+                     <div id="notification-bar" class="hidden md:block text-sm text-gray-600 dark:text-gray-300 text-right whitespace-nowrap overflow-hidden max-w-[300px]"></div>
+                     <div class="md:hidden relative">
+                        <img id="mobile-header-avatar" src="" class="w-8 h-8 rounded-full object-cover border border-gray-300">
+                        <span id="mobile-header-status" class="absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full bg-green-500 ring-1 ring-white"></span>
+                     </div>
+                </div>
+            </div>
+
+            <!-- View Content -->
+            <main class="flex-1 overflow-y-auto bg-gray-50 p-0 md:p-6 pb-20 md:pb-6 relative">
+                <!-- Other views placeholders -->
+                <div id="view-phat-trien" class="app-view h-full p-4">
+                    <div class="flex flex-col items-center justify-center h-64 text-center">
+                         <svg class="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                        <h3 class="text-xl text-gray-500 font-medium" data-i18n="header_dashboard">Dashboard</h3><p class="text-gray-400 text-sm mt-1">Feature under development</p>
+                    </div>
+                </div>
+                
+                <!-- LISTING VIEW (Kanban) -->
+                <div id="view-ton-kho" class="app-view hidden h-full p-2 md:p-0"></div>
+                
+                <!-- DETAIL VIEW (Excel-like Grid) -->
+                <div id="view-chi-tiet" class="app-view hidden h-full flex flex-col">
+                    <!-- Toolbar and Grid will be injected here by detail.js -->
+                </div>
+
+                <!-- PRODUCT VIEW (Excel-like Grid) -->
+                <div id="view-san-pham" class="app-view hidden h-full flex flex-col">
+                     <div class="flex flex-col items-center justify-center h-64 text-center">
+                        <svg class="w-16 h-16 text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg>
+                        <h3 class="text-xl text-gray-500 font-medium" data-i18n="header_product">Product Management</h3><p class="text-gray-400 text-sm mt-1">Feature under development</p>
+                    </div>
+                </div>
+
+                <!-- SETTINGS VIEW -->
+                <div id="view-cai-dat" class="app-view hidden h-full flex flex-col md:block"></div>
+            </main>
+        </div>
+
+        <!-- Mobile Bottom Navigation -->
+        <nav id="mobile-bottom-nav" class="md:hidden fixed bottom-0 w-full bg-white border-t shadow-lg flex justify-between items-center px-2 py-1 z-40 text-gray-500 safe-area-pb">
+             <button data-view="view-phat-trien" class="nav-button bottom-nav-item w-1/5">
+                <div class="nav-indicator rounded-full p-1 mb-0.5"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path></svg></div>
+                <span data-i18n="nav_dashboard">Tổng quan</span>
+            </button>
+             <button data-view="view-ton-kho" class="nav-button bottom-nav-item w-1/5">
+                <div class="nav-indicator rounded-full p-1 mb-0.5"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg></div>
+                <span data-i18n="nav_listing">Kho hàng</span>
+            </button>
+             <button data-view="view-chi-tiet" class="nav-button bottom-nav-item w-1/5">
+                <div class="nav-indicator rounded-full p-1 mb-0.5"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg></div>
+                <span data-i18n="nav_detail">Chi tiết</span>
+            </button>
+            <button data-view="view-san-pham" class="nav-button bottom-nav-item w-1/5">
+                <div class="nav-indicator rounded-full p-1 mb-0.5"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path></svg></div>
+                <span data-i18n="nav_product">Sản phẩm</span>
+            </button>
+            <button data-view="view-cai-dat" class="nav-button bottom-nav-item w-1/5">
+                <div class="nav-indicator rounded-full p-1 mb-0.5"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0 3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826 3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path></svg></div>
+                <span data-i18n="nav_setting">Cài đặt</span>
+            </button>
+        </nav>
+    </div>
+    
+    <!-- Modals (Confirm, etc.) -->
+    <div id="confirm-modal" class="hidden fixed inset-0 z-[20000] flex items-center justify-center modal-backdrop p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-sm transform transition-all">
+            <h3 id="confirm-title" class="text-lg font-bold text-gray-800 mb-2" data-i18n="confirm_title">Xác nhận</h3>
+            <p id="confirm-message" class="text-gray-600 mb-6 whitespace-pre-wrap max-h-[60vh] overflow-y-auto custom-scrollbar" data-i18n="confirm_msg">Bạn có chắc muốn tiếp tục?</p>
+            <div class="flex justify-end gap-3">
+                <button id="confirm-cancel-btn" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium" data-i18n="btn_cancel">Hủy</button>
+                <button id="confirm-ok-btn" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 font-medium shadow-md" data-i18n="btn_confirm">Đồng ý</button>
+            </div>
+        </div>
+    </div>
+    <div id="password-reset-modal" class="hidden fixed inset-0 z-[10000] flex items-center justify-center modal-backdrop p-4">
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">Đặt lại mật khẩu</h3>
+            <p class="text-sm text-gray-500 mb-4">Cho tài khoản: <span id="reset-user-gmail-display" class="font-mono font-bold text-gray-700"></span></p>
+            <form id="password-reset-form">
+                <input type="hidden" id="reset-user-gmail">
+                <label for="reset-new-password" class="block text-sm font-medium text-gray-700 mb-1" data-i18n="label_new_pass">Mật khẩu mới</label>
+                <input type="password" id="reset-new-password" required class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" id="cancel-reset-btn" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium" data-i18n="btn_cancel">Hủy</button>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 font-medium shadow-md" data-i18n="btn_save">Lưu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <div id="win-transition-modal" class="hidden fixed inset-0 z-[10000] flex items-center justify-center modal-backdrop p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+            <div class="p-4 border-b dark:border-gray-700 bg-green-50 dark:bg-green-900/30">
+                <h3 class="text-lg font-bold text-green-800 dark:text-green-300">Xác nhận Thắng Thầu (Win)</h3>
+                <p class="text-xs text-green-600 dark:text-green-400 mt-1">Cập nhật thông tin chi tiết trước khi hoàn tất.</p>
+            </div>
+            <div class="p-6 flex-1 overflow-y-auto">
+                <div class="mb-6">
+                    <label class="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Loại hình thắng thầu:</label>
+                    <div class="flex gap-4">
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" name="win-type" value="full" checked class="w-4 h-4 text-green-600 focus:ring-green-500 border-gray-300">
+                            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Win toàn phần</span>
+                        </label>
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" name="win-type" value="partial" class="w-4 h-4 text-green-600 focus:ring-green-500 border-gray-300">
+                            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Win 1 phần</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4 mb-6">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày Ký <span class="text-red-500">*</span></label>
+                        <input type="date" id="win-ngay-ky" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày Kết Thúc <span class="text-red-500">*</span></label>
+                        <input type="date" id="win-ngay-kt" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                    </div>
+                </div>
+                <div id="win-material-section" class="hidden">
+                    <h4 class="font-bold text-gray-700 dark:text-gray-200 text-sm mb-2">Điều chỉnh số lượng trúng:</h4>
+                    <div class="border rounded-lg overflow-hidden border-gray-200 dark:border-gray-700">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-100 dark:bg-gray-700 text-xs uppercase">
+                                <tr>
+                                    <th class="px-3 py-2">Mã VT</th>
+                                    <th class="px-3 py-2 w-20">Quota</th>
+                                    <th class="px-3 py-2 w-24">SL Trúng</th>
+                                </tr>
+                            </thead>
+                            <tbody id="win-material-list" class="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="p-4 border-t dark:border-gray-700 flex justify-end gap-3 bg-gray-50 dark:bg-gray-800">
+                <button id="win-cancel-btn" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">Hủy bỏ</button>
+                <button id="win-save-btn" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-md font-medium">Lưu & Hoàn Tất</button>
+            </div>
+        </div>
+    </div>
+    
+     <div id="listing-modal" class="hidden fixed inset-0 z-[10000] modal-backdrop">
+        <div id="listing-modal-content" class="absolute bg-white dark:bg-gray-800 rounded-xl shadow-2xl flex flex-col w-full md:w-[1000px] h-full md:h-auto md:max-h-[95vh] md:top-5 md:left-1/2 md:-translate-x-1/2 overflow-hidden transition-opacity">
+            <div id="listing-modal-header" class="p-3 md:p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700 rounded-t-xl cursor-move select-none flex-shrink-0">
+                <h3 id="listing-modal-title" class="text-base md:text-lg font-bold text-gray-800 dark:text-white" data-i18n="modal_add_title">Thêm Mới Thầu</h3>
+                <div class="flex items-center gap-2">
+                    <button onclick="window.viewListingHistory()" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 p-1" title="Xem lịch sử">
+                         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    </button>
+                    <button onclick="window.closeListingModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 p-1">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+            </div>
+            <form id="listing-form" onsubmit="window.saveListing(event)" class="flex-1 flex flex-col overflow-hidden text-xs md:text-sm">
+                 <input type="hidden" id="listing-id">
+                 <input type="hidden" id="l-status" value="Waiting">
+                 <div class="flex-1 flex flex-col md:flex-row overflow-hidden">
+                     <div class="w-full md:w-2/3 p-4 md:p-6 overflow-y-auto custom-scrollbar border-b md:border-b-0 md:border-r dark:border-gray-700 flex flex-col gap-4">
+                         <div class="grid grid-cols-6 gap-3 md:gap-4">
+                            <div class="col-span-2">
+                                 <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_year">Năm</label>
+                                 <input type="number" id="l-nam" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                            </div>
+                            <div class="col-span-2">
+                                <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_date_created">Ngày tạo</label>
+                                <input type="date" id="l-ngay" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                            </div>
+                            <div class="col-span-2">
+                                <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_code">Mã Thầu</span> <span class="text-red-500">*</span></label>
+                                <input type="text" id="l-ma-thau" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white font-mono font-bold">
+                            </div>
+                            <div class="col-span-6 relative group input-wrapper">
+                                 <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_hospital">Bệnh Viện</span> <span class="text-red-500">*</span></label>
+                                 <input type="text" id="l-benh-vien" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                                 <ul id="list-benh-vien" class="custom-dropdown-list custom-scrollbar"></ul>
+                            </div>
+                            <div class="col-span-3 relative group input-wrapper">
+                                <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_province">Tỉnh</span> <span class="text-red-500">*</span></label>
+                                <input type="text" id="l-tinh" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                                <ul id="list-tinh" class="custom-dropdown-list custom-scrollbar"></ul>
+                            </div>
+                            <div class="col-span-3 relative group input-wrapper">
+                                 <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_area">Khu Vực</span> <span class="text-red-500">*</span></label>
+                                 <input type="text" id="l-khu-vuc" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                                 <ul id="list-khu-vuc" class="custom-dropdown-list custom-scrollbar"></ul>
+                            </div>
+                            <div class="col-span-3 relative group input-wrapper">
+                                <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_type">Loại</span> <span class="text-red-500">*</span></label>
+                                <input type="text" id="l-loai" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                                <ul id="list-loai" class="custom-dropdown-list custom-scrollbar"></ul>
+                            </div>
+                             <div class="col-span-3 relative group input-wrapper">
+                                <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_distributor">Nhà Phân Phối</span> <span class="text-red-500">*</span></label>
+                                <input type="text" id="l-npp" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                                <ul id="list-npp" class="custom-dropdown-list custom-scrollbar"></ul>
+                            </div>
+                            <div class="col-span-3">
+                                <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_signed_date">Ngày Ký</label>
+                                <input type="date" id="l-ngay-ky" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                            </div>
+                            <div class="col-span-3">
+                                <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_end_date">Ngày Kết Thúc</label>
+                                <input type="date" id="l-ngay-kt" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                            </div>
+                            <div class="col-span-3 relative group input-wrapper">
+                                <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_sector">Ngành</label>
+                                <input type="text" id="l-nganh" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                                <ul id="list-nganh" class="custom-dropdown-list custom-scrollbar"></ul>
+                            </div>
+                            <div class="col-span-3 relative group input-wrapper">
+                                 <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_psr">PSR</label>
+                                 <input type="text" id="l-psr" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                                 <ul id="list-psr" class="custom-dropdown-list custom-scrollbar"></ul>
+                            </div>
+                            <div class="col-span-3 relative group input-wrapper">
+                                <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_manager">Quản Lý</label>
+                                <input type="text" id="l-quan-ly" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                                <ul id="list-quan-ly" class="custom-dropdown-list custom-scrollbar"></ul>
+                            </div>
+                            <div class="col-span-3 relative group input-wrapper">
+                                <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1">Đính kèm tệp</label>
+                                <label id="btn-upload-label" class="cursor-pointer w-full bg-white dark:bg-gray-700 border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-300 hover:text-primary hover:border-primary hover:bg-blue-50 dark:hover:bg-gray-600 px-3 py-2 rounded flex items-center justify-center shadow-sm transition-all gap-2 h-[38px] md:h-[42px]" title="Tải tệp lên">
+                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+                                     <span class="text-sm">Chọn tệp...</span>
+                                     <input type="file" id="file-upload-input" multiple class="hidden">
+                                </label>
+                            </div>
+                         </div>
+                         <div id="file-list-container" class="space-y-2 mt-4"></div>
+                     </div>
+                     <div class="w-full md:w-1/3 bg-gray-50 dark:bg-gray-900/50 p-4 md:p-6 flex flex-col h-full">
+                        <div class="flex justify-between items-center mb-3 flex-shrink-0">
+                            <h4 class="font-bold text-gray-700 dark:text-gray-200">Danh sách vật tư</h4>
+                            <button type="button" id="btn-add-material" class="text-xs px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center">
+                                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Thêm
+                            </button>
+                        </div>
+                        <div class="bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 overflow-hidden flex-1 flex flex-col">
+                            <div class="overflow-y-auto custom-scrollbar h-[400px] max-h-[400px]">
+                                 <table class="w-full text-sm text-left">
+                                    <thead class="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 uppercase text-[10px] sticky top-0 z-10 shadow-sm">
+                                        <tr>
+                                            <th class="px-2 py-2">Mã VT</th>
+                                            <th class="px-2 py-2 w-16 text-center">Quota</th>
+                                            <th class="px-2 py-2 w-16 text-center">Trúng</th>
+                                            <th class="px-1 py-2 w-8"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="material-list-body" class="divide-y divide-gray-200 dark:divide-gray-700">
+                                    </tbody>
+                                </table>
+                                <div id="empty-material-msg" class="p-4 text-center text-gray-400 text-xs italic hidden">Chưa có vật tư nào.</div>
+                            </div>
+                        </div>
+                     </div>
+                 </div>
+                 <div class="flex-none border-t dark:border-gray-700 bg-white dark:bg-gray-800 p-3 md:p-4 flex justify-end gap-3 z-20">
+                    <button type="button" onclick="window.closeListingModal()" class="px-3 py-1.5 md:px-4 md:py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 font-medium" data-i18n="btn_cancel">Hủy</button>
+                    <button type="submit" id="btn-save-listing" class="px-4 py-1.5 md:px-6 md:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md font-medium" data-i18n="btn_save">Lưu</button>
+                </div>
+            </form>
+             <div id="modal-resize-handle" class="resizer hidden md:block"></div>
+        </div>
+     </div>
+     
+    <div id="history-modal" class="hidden fixed inset-0 z-[11000] flex items-center justify-center modal-backdrop p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
+            <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700 rounded-t-xl">
+                <h3 class="text-lg font-bold text-gray-800 dark:text-white">Lịch sử hoạt động</h3>
+                <button onclick="document.getElementById('history-modal').classList.add('hidden')" class="text-gray-500 hover:text-gray-700 dark:text-gray-400">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div id="history-list" class="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar bg-gray-50 dark:bg-gray-900">
+                 <div class="text-center text-gray-500 text-sm">Đang tải...</div>
+            </div>
+        </div>
+    </div>
+
+     <div id="permission-modal" class="hidden fixed inset-0 z-[10000] flex items-center justify-center modal-backdrop p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl flex flex-col max-h-[90vh]">
+            <div class="p-5 border-b dark:border-gray-700 flex justify-between items-center">
+                <div>
+                    <h3 class="text-lg font-bold text-gray-800 dark:text-white" data-i18n="perm_title">Phân quyền người dùng</h3>
+                    <p id="perm-user-gmail" class="text-sm text-gray-500 dark:text-gray-400 mt-1"></p>
+                </div>
+                <button id="close-perm-btn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="flex-1 overflow-y-auto p-0">
+                <div class="min-w-full inline-block align-middle">
+                    <div class="border-b dark:border-gray-700">
+                        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-700 sticky top-0 z-10">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider" data-i18n="perm_screen">Màn hình</th>
+                                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider" data-i18n="perm_view">Xem</th>
+                                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider" data-i18n="perm_add">Thêm</th>
+                                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider" data-i18n="perm_edit">Sửa</th>
+                                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider" data-i18n="perm_delete">Xóa</th>
+                                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider" data-i18n="perm_import">Nhập</th>
+                                    <th scope="col" class="px-4 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider" data-i18n="perm_export">Xuất</th>
+                                </tr>
+                            </thead>
+                            <tbody id="perm-table-body" class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="p-5 border-t dark:border-gray-700 flex justify-end gap-3 bg-gray-50 dark:bg-gray-800 rounded-b-xl">
+                <button id="cancel-perm-btn" class="px-4 py-2 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 font-medium text-sm" data-i18n="btn_cancel">Hủy</button>
+                <button id="save-perm-btn" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 font-medium shadow-md text-sm" data-i18n="btn_save">Lưu cấu hình</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="column-settings-modal" class="hidden fixed inset-0 z-[10000] flex items-center justify-center modal-backdrop p-4">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm flex flex-col max-h-[80vh]">
+            <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700 rounded-t-xl">
+                <h3 class="text-lg font-bold text-gray-800 dark:text-white" data-i18n="col_manager_title">Quản lý cột</h3>
+                <button id="close-col-settings-btn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-2 bg-yellow-50 dark:bg-yellow-900/20 text-xs text-yellow-800 dark:text-yellow-200 border-b dark:border-gray-700 text-center">
+                Kéo thả để sắp xếp. Ghim để đưa lên đầu.
+            </div>
+            <div id="column-list-container" class="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+            </div>
+            <div class="p-4 border-t dark:border-gray-700 flex justify-end">
+                <button id="btn-save-cols" class="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 font-medium shadow-md" data-i18n="btn_save">Áp dụng</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHATBOT CONTAINER -->
+    <!-- Window Container (Fixed Position) -->
+    <div id="chatbot-window" class="hidden fixed bottom-20 right-4 w-[350px] md:w-[400px] h-[500px] bg-white dark:bg-gray-800 rounded-lg shadow-2xl flex flex-col overflow-hidden border border-gray-200 dark:border-gray-700 animate-fade-in-up z-[9998]" style="min-width: 300px; min-height: 400px; max-width: 90vw; max-height: 90vh;">
+        <!-- Resize Handle (Top-Left) -->
+        <div id="chatbot-resize-handle" class="absolute top-0 left-0 w-6 h-6 cursor-nwse-resize z-50 flex items-start justify-start p-1 group">
+            <svg class="w-4 h-4 text-gray-400 group-hover:text-primary transition-colors transform rotate-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+        </div>
+
+        <!-- Shopee-like Header -->
+        <div class="bg-primary p-3 flex justify-between items-center text-white flex-shrink-0 shadow-md cursor-default">
+            <div class="flex items-center gap-3">
+                <div class="relative">
+                    <div class="w-9 h-9 bg-white rounded-full flex items-center justify-center text-primary font-bold shadow-sm border-2 border-white/50">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-400 border-2 border-primary rounded-full"></span>
+                </div>
+                <div>
+                    <h3 class="font-bold text-sm leading-tight">Trợ lý ảo</h3>
+                    <p class="text-[10px] opacity-90 text-blue-100 flex items-center gap-1">
+                        <span class="inline-block w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                        Đang hoạt động
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-1">
+                <button id="chatbot-minimize-btn" class="p-1.5 hover:bg-white/20 rounded transition-colors text-white/90 hover:text-white" title="Thu nhỏ">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
+                </button>
+                <button id="chatbot-close-btn" class="p-1.5 hover:bg-white/20 rounded transition-colors text-white/90 hover:text-white" title="Đóng">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Suggestions (Quick Actions) -->
+        <div id="chatbot-suggestions" class="bg-gray-50 dark:bg-gray-900 border-b border-gray-100 dark:border-gray-700 px-3 py-2 flex gap-2 overflow-x-auto no-scrollbar whitespace-nowrap">
+            <!-- Chips injected by JS -->
+        </div>
+
+        <!-- Messages Area -->
+        <div id="chatbot-messages" class="flex-1 overflow-y-auto p-3 space-y-3 bg-gray-50/50 dark:bg-gray-900 custom-scrollbar text-sm">
+            <!-- Messages injected by JS -->
+        </div>
+
+        <!-- Input Area -->
+        <div class="p-3 bg-white dark:bg-gray-800 border-t dark:border-gray-700 flex-shrink-0">
+            <!-- Image Preview -->
+            <div id="chatbot-image-preview" class="hidden mb-2 relative inline-block group">
+                <img src="" class="h-14 w-auto object-cover rounded-lg border border-gray-200 dark:border-gray-600 shadow-sm">
+                <button id="chatbot-remove-img" class="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full p-0.5 shadow-md hover:bg-red-600 transition-colors">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+
+            <form id="chatbot-form" class="flex items-end gap-2 relative">
+                <label class="p-2 text-gray-400 hover:text-primary cursor-pointer transition-colors rounded-full hover:bg-gray-100 dark:hover:bg-gray-700" title="Gửi ảnh">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                    <input type="file" id="chatbot-file-input" accept="image/*" class="hidden">
+                </label>
+                <div class="flex-1 relative bg-gray-100 dark:bg-gray-700 rounded-2xl">
+                    <textarea id="chatbot-input" rows="1" class="w-full pl-4 pr-3 py-2.5 bg-transparent focus:outline-none text-gray-800 dark:text-white resize-none max-h-24 custom-scrollbar leading-tight placeholder-gray-400 text-sm" placeholder="Nhập tin nhắn..."></textarea>
+                </div>
+                <button type="submit" id="chatbot-send-btn" class="p-2.5 bg-primary text-white rounded-full hover:bg-blue-700 transition-all shadow-md disabled:opacity-50 disabled:cursor-not-allowed transform active:scale-95 flex items-center justify-center">
+                    <svg class="w-4 h-4 transform rotate-90 translate-x-[1px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Draggable Floating Button (Independent of Window) -->
+    <button id="chatbot-toggle-btn" class="fixed bottom-4 right-4 w-14 h-14 bg-gradient-to-br from-blue-600 to-blue-500 rounded-full shadow-[0_4px_14px_0_rgba(37,99,235,0.39)] flex items-center justify-center text-white hover:scale-105 active:scale-95 transition-transform z-[9999] group touch-none border-2 border-white/20">
+        <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+        <span class="absolute -top-1 -right-1 flex h-3.5 w-3.5">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500 border-2 border-white"></span>
+        </span>
+    </button>
+
+    <script src="app.js" type="module"></script>
+</body>
+</html>
