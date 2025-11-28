@@ -145,16 +145,20 @@ export function initChatbot() {
     toggleBtn.style.display = 'flex';     
     toggleBtn.style.zIndex = '9999';      
     
-    toggleBtn.className = "fixed bottom-6 right-6 p-0 w-16 h-16 bg-[#9333ea] hover:bg-[#7e22ce] rounded-full shadow-2xl hover:scale-105 transition-transform flex items-center justify-center cursor-pointer border-2 border-white";
+    // === FIX 1: Giảm kích thước trên mobile (w-12 h-12) và giữ nguyên desktop (md:w-16 md:h-16) ===
+    toggleBtn.className = "fixed bottom-6 right-6 p-0 w-12 h-12 md:w-16 md:h-16 bg-[#9333ea] hover:bg-[#7e22ce] rounded-full shadow-2xl hover:scale-105 transition-transform flex items-center justify-center cursor-pointer border-2 border-white";
     toggleBtn.innerHTML = `
         <div class="relative flex items-center justify-center w-full h-full">
-            <img src="https://cdn-icons-png.flaticon.com/128/69/69059.png" alt="Chatbot Icon" class="w-10 h-10 object-contain filter brightness-0 invert">
+            <img src="https://cdn-icons-png.flaticon.com/128/69/69059.png" alt="Chatbot Icon" class="w-6 h-6 md:w-10 md:h-10 object-contain filter brightness-0 invert">
             <span class="absolute top-0 right-0 flex h-3.5 w-3.5">
               <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
               <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500 border-2 border-[#9333ea]"></span>
             </span>
         </div>
     `;
+
+    // Đảm bảo cửa sổ chat không bị tràn màn hình trên mobile
+    chatWindow.classList.add("max-w-[95vw]"); 
 
     // 2. Kéo thả LIÊN KẾT (Cửa sổ và Nút dính nhau)
     makeElementDraggable(toggleBtn, { isToggle: true, linkedEl: chatWindow });
@@ -363,7 +367,7 @@ function initResizableTopLeft(el) {
     el.appendChild(handle);
 
     // Kích thước tối thiểu
-    el.style.minWidth = '320px';
+    el.style.minWidth = '300px'; // Giảm 1 chút cho màn hình bé
     el.style.minHeight = '400px';
 
     let isResizing = false;
@@ -414,7 +418,7 @@ function initResizableTopLeft(el) {
         const newHeight = startHeight - dy;
 
         // Cập nhật Width & Left (Nếu width > min)
-        if (newWidth > 320) {
+        if (newWidth > 300) {
             el.style.width = `${newWidth}px`;
             el.style.left = `${startLeft + dx}px`; // Cửa sổ phải dịch chuyển theo chuột
         }
@@ -460,6 +464,7 @@ function makeElementDraggable(el, options = {}) {
         if (options.isWindow) {
             const rect = el.getBoundingClientRect();
             const clickY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
+            // Chỉ cho phép kéo ở phần header (60px đầu tiên)
             if (clickY - rect.top > 60 || ['INPUT', 'BUTTON', 'TEXTAREA', 'I', 'SVG', 'PATH'].includes(e.target.tagName)) return;
         }
 
@@ -565,7 +570,7 @@ function makeElementDraggable(el, options = {}) {
         if (options.isToggle && !hasMoved) {
             chatWindow.classList.toggle('hidden');
             if (!chatWindow.classList.contains('hidden')) {
-                // --- KHI MỞ CHAT: TỰ ĐỘNG CĂN VỊ TRÍ "LỜI THOẠI" ---
+                // --- KHI MỞ CHAT: TỰ ĐỘNG CĂN VỊ TRÍ ---
                 alignChatWindowToButton(el, chatWindow);
                 
                 document.getElementById('chatbot-input').focus();
@@ -578,24 +583,44 @@ function makeElementDraggable(el, options = {}) {
     el.addEventListener('touchstart', onMouseDown, { passive: false });
 }
 
-// Hàm phụ trợ: Căn cửa sổ chat ngay trên đầu nút (hiệu ứng bong bóng lời thoại)
+// === FIX 2: Cập nhật hàm căn vị trí để không bị ẩn trên mobile ===
 function alignChatWindowToButton(btn, win) {
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+    
+    // Nếu là Mobile (< 768px): Căn giữa màn hình thay vì căn theo nút
+    if (winW < 768) {
+        // Reset style để đảm bảo nó hiển thị đúng
+        win.style.position = 'fixed';
+        win.style.bottom = 'auto';
+        win.style.right = 'auto';
+        
+        // Tính toán để căn giữa
+        const winRect = win.getBoundingClientRect(); // Lấy kích thước thật sau khi remove hidden
+        const left = (winW - winRect.width) / 2;
+        const top = (winH - winRect.height) / 2;
+        
+        // Đảm bảo không bị âm (tràn lên trên)
+        win.style.left = `${Math.max(10, left)}px`;
+        win.style.top = `${Math.max(10, top)}px`;
+        
+        return;
+    }
+
+    // Nếu là Desktop: Giữ nguyên logic cũ (Bong bóng lời thoại)
     const btnRect = btn.getBoundingClientRect();
     const winRect = win.getBoundingClientRect();
     
-    // Tính toán vị trí:
     // Top = Đỉnh nút - Chiều cao cửa sổ - 10px khoảng cách
     let newTop = btnRect.top - winRect.height - 10;
     
     // Left = Căn phải cửa sổ thẳng hàng với căn phải nút
-    // (Button Right - Window Width)
     let newLeft = (btnRect.left + btnRect.width) - winRect.width;
 
     // Giới hạn không cho tràn màn hình
-    if (newTop < 10) newTop = 10; // Cách mép trên 10px
-    if (newLeft < 10) newLeft = 10; // Cách mép trái 10px
+    if (newTop < 10) newTop = 10; 
+    if (newLeft < 10) newLeft = 10; 
     
-    // Gán vị trí
     win.style.bottom = 'auto';
     win.style.right = 'auto';
     win.style.top = newTop + 'px';
