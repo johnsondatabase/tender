@@ -48,7 +48,7 @@ function getFormState() {
 function renderMaterialList(readOnly) {
     const container = document.getElementById('material-list-body');
     const emptyMsg = document.getElementById('empty-material-msg');
-    const totalFooter = document.getElementById('material-total-footer');
+    const totalFooter = document.getElementById('material-total-header'); // Changed ID to header
     
     if(!container) return;
     container.innerHTML = '';
@@ -106,13 +106,18 @@ function renderMaterialList(readOnly) {
         }
     });
 
-    // Update Fixed Footer (Using Flexbox to mimic table columns)
+    // Update Total Header (Now at top)
     if (totalFooter) {
         totalFooter.innerHTML = `
-            <div class="flex-1 text-right pr-2 text-gray-600 dark:text-gray-300 font-bold">Tổng:</div>
-            <div class="w-20 text-center px-1 font-bold text-blue-600 dark:text-blue-400 border-l dark:border-gray-600">${totalQuota.toLocaleString('vi-VN')}</div>
-            <div class="w-20 text-center px-1 font-bold text-green-600 dark:text-green-400 border-l dark:border-gray-600">${totalWon.toLocaleString('vi-VN')}</div>
-            <div class="w-8"></div>
+            <div class="flex-1 text-left pl-2 text-gray-600 dark:text-gray-300 text-xs flex items-center">
+                <span class="font-bold mr-1">SL:</span> ${currentMaterials.length}
+            </div>
+            <div class="flex items-center">
+                <div class="text-right px-2 text-gray-600 dark:text-gray-300 font-bold text-xs mr-2">Tổng:</div>
+                <div class="w-20 text-center px-1 font-bold text-blue-600 dark:text-blue-400 border-l dark:border-gray-600 bg-white dark:bg-gray-800 rounded-sm">${totalQuota.toLocaleString('vi-VN')}</div>
+                <div class="w-20 text-center px-1 font-bold text-green-600 dark:text-green-400 border-l dark:border-gray-600 bg-white dark:bg-gray-800 rounded-sm">${totalWon.toLocaleString('vi-VN')}</div>
+                <div class="w-8"></div>
+            </div>
         `;
     }
 }
@@ -239,9 +244,12 @@ function setupSingleAutocomplete(inputId, listId, values, onSelect = null) {
 export async function openListingModal(item = null, readOnly = false, isPreFill = false) {
     const modal = document.getElementById('listing-modal');
     
-    // 1. Updated HTML Structure:
-    //    - Tách bảng vật tư thành 2 phần: Scrollable Body và Fixed Footer.
-    //    - Sử dụng các class w-20, w-8 để đảm bảo căn chỉnh cột giữa Body và Footer.
+    // Updated HTML Structure: 
+    // 1. Mobile view: main container overflows y, inner parts height auto.
+    // 2. Desktop view: main container overflow hidden, inner parts scroll independently.
+    // 3. Total Header moved to top of material section.
+    // 4. Modal Header has ID for dragging.
+    
     document.getElementById('listing-modal-content').innerHTML = `
         <div id="listing-modal-header" class="p-3 md:p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700 rounded-t-xl cursor-move select-none flex-shrink-0">
             <h3 id="listing-modal-title" class="text-base md:text-lg font-bold text-gray-800 dark:text-white" data-i18n="modal_add_title">Thêm Mới Thầu</h3>
@@ -264,11 +272,12 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
                  <input type="text" id="l-ma-thau">
              </div>
 
-             <!-- MOBILE LAYOUT FIX: Use flex-col. -->
-             <div class="flex-1 flex flex-col md:flex-row overflow-hidden bg-white dark:bg-gray-800">
+             <!-- MOBILE LAYOUT FIX: Parent scrolls on mobile, Children scroll on Desktop -->
+             <div class="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden bg-white dark:bg-gray-800">
                  
-                 <!-- SECTION 1: INPUTS (General Info) - Scrollable on both, takes 2/3 on desktop -->
-                 <div class="w-full md:w-2/3 p-4 md:p-6 overflow-y-auto custom-scrollbar border-b md:border-b-0 md:border-r dark:border-gray-700 flex flex-col gap-4 flex-shrink-0 md:flex-shrink">
+                 <!-- SECTION 1: INPUTS -->
+                 <!-- Mobile: h-auto (expand), no internal scroll. Desktop: h-full, scrollable -->
+                 <div class="w-full md:w-2/3 p-4 md:p-6 md:overflow-y-auto custom-scrollbar border-b md:border-b-0 md:border-r dark:border-gray-700 flex flex-col gap-4 flex-shrink-0 md:flex-shrink h-auto md:h-full">
                      <div class="grid grid-cols-6 gap-3 md:gap-4">
                         <div class="col-span-4 relative group input-wrapper">
                              <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_hospital">Bệnh Viện</span> <span class="text-red-500">*</span></label>
@@ -345,8 +354,9 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
                      <div id="file-list-container" class="space-y-2 mt-4"></div>
                  </div>
                  
-                 <!-- SECTION 2: MATERIALS (Sticky Footer Layout) -->
-                 <div class="w-full md:w-1/3 bg-gray-50 dark:bg-gray-900/50 p-4 md:p-6 flex flex-col h-[400px] md:h-full border-t md:border-t-0 flex-shrink-0">
+                 <!-- SECTION 2: MATERIALS -->
+                 <!-- Mobile: h-auto (expand). Desktop: h-full, scrollable independently -->
+                 <div class="w-full md:w-1/3 bg-gray-50 dark:bg-gray-900/50 p-4 md:p-6 flex flex-col h-auto md:h-full border-t md:border-t-0 flex-shrink-0">
                     <div class="flex justify-between items-center mb-3 flex-shrink-0">
                         <h4 class="font-bold text-gray-700 dark:text-gray-200">Danh sách vật tư</h4>
                         <button type="button" id="btn-add-material" class="text-xs px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center">
@@ -354,10 +364,16 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
                         </button>
                     </div>
                     
-                    <div class="bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 flex-1 flex flex-col overflow-hidden relative">
+                    <div class="bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 flex-1 flex flex-col overflow-hidden relative h-auto md:h-full">
                         
+                        <!-- TOTAL HEADER (Moved to top) -->
+                        <div id="material-total-header" class="bg-gray-100 dark:bg-gray-800 border-b dark:border-gray-700 p-2 flex justify-between items-center shadow-sm z-20">
+                            <!-- Injected by JS -->
+                        </div>
+
                         <!-- SCROLLABLE PART -->
-                        <div class="flex-1 overflow-y-auto custom-scrollbar">
+                        <!-- Mobile: No internal scroll (expand). Desktop: Scroll internal -->
+                        <div class="md:flex-1 md:overflow-y-auto custom-scrollbar">
                              <table class="w-full text-sm text-left">
                                 <thead class="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 uppercase text-[10px] sticky top-0 z-10 shadow-sm">
                                     <tr>
@@ -371,11 +387,6 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
                                 </tbody>
                             </table>
                             <div id="empty-material-msg" class="p-4 text-center text-gray-400 text-xs italic hidden">Chưa có vật tư nào.</div>
-                        </div>
-
-                        <!-- FIXED FOOTER PART -->
-                        <div id="material-total-footer" class="bg-gray-100 dark:bg-gray-800 border-t dark:border-gray-700 p-2 text-xs font-bold flex items-center shadow-[0_-2px_4px_rgba(0,0,0,0.05)] z-20">
-                            <!-- Injected by JS -->
                         </div>
                     </div>
                  </div>
@@ -410,6 +421,9 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
             if(list) list.classList.remove('show');
         };
     }
+
+    // Initialize Draggable Logic
+    initDraggableModal();
 
     // --- Data Fetching ---
     await fetchAuxiliaryData();
@@ -781,5 +795,75 @@ export function generateMaThau() {
         };
         const hospitalCode = getAcronym(hospitalVal);
         if (dateStr && hospitalCode) maThauInput.value = `${dateStr}-${hospitalCode}`;
+    }
+}
+
+// Function to make modal draggable and resizable
+function initDraggableModal() {
+    const modal = document.getElementById('listing-modal-content');
+    const header = document.getElementById('listing-modal-header');
+    
+    if(!modal || !header) return;
+
+    let isDragging = false;
+    let startX, startY, initialLeft, initialTop;
+
+    header.onmousedown = (e) => {
+        if(window.innerWidth < 768) return; // Disable drag on mobile
+        // Only allow left mouse button
+        if (e.button !== 0) return;
+        
+        isDragging = true;
+        startX = e.clientX;
+        startY = e.clientY;
+        
+        const rect = modal.getBoundingClientRect();
+        initialLeft = rect.left;
+        initialTop = rect.top;
+        
+        // Reset styles to allow absolute positioning drag
+        modal.style.margin = '0';
+        modal.style.transform = 'none';
+        modal.style.left = initialLeft + 'px';
+        modal.style.top = initialTop + 'px';
+        modal.style.position = 'absolute';
+        
+        document.onmousemove = (e) => {
+            if (!isDragging) return;
+            const dx = e.clientX - startX;
+            const dy = e.clientY - startY;
+            modal.style.left = (initialLeft + dx) + 'px';
+            modal.style.top = (initialTop + dy) + 'px';
+        };
+
+        document.onmouseup = () => {
+            isDragging = false;
+            document.onmousemove = null;
+            document.onmouseup = null;
+        };
+    };
+    
+    // Resizable Logic
+    const resizer = document.getElementById('modal-resize-handle');
+    if(resizer) {
+        resizer.onmousedown = (e) => {
+            e.stopPropagation();
+            let startW = modal.offsetWidth;
+            let startH = modal.offsetHeight;
+            let startX = e.clientX;
+            let startY = e.clientY;
+
+            document.onmousemove = (e) => {
+                const newW = startW + e.clientX - startX;
+                const newH = startH + e.clientY - startY;
+                if(newW > 300) modal.style.width = newW + 'px';
+                if(newH > 300) modal.style.height = newH + 'px';
+            };
+
+            document.onmouseup = () => {
+                document.onmousemove = null;
+                document.onmouseup = null;
+            };
+        };
     }
 }

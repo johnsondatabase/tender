@@ -1,8 +1,4 @@
 
-
-
-
-
 import { sb, showToast, showLoading, currentUser } from './app.js';
 import { translations, getCurrentLanguage, setLanguage } from './lang.js';
 
@@ -89,7 +85,7 @@ export async function onShowDetailView() {
     // - Mobile: Stats on top (toggleable), Footer simple.
     // - Desktop: Stats on bottom (Footer), No toggle on top.
     container.innerHTML = `
-        <div class="flex flex-col h-full relative">
+        <div class="flex flex-col h-full relative pb-[4.5rem] md:pb-0"> <!-- Fixed: Added pb-[4.5rem] on mobile for navigation overlap -->
             <!-- Toolbar -->
             <div class="flex flex-wrap items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700 shadow-sm z-[200]">
                 
