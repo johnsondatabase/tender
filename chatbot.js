@@ -1,23 +1,65 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { showToast, showLoading, sb, showView } from './app.js';
 import { openListingModal } from './listing-form.js';
 
 let chatSession = null;
 let aiClient = null;
-let currentImageBlob = null; 
+let currentImageBlob = null;
+let globalApiKey = '';
 
 // --- QUẢN LÝ API KEY ---
 const DEFAULT_API_KEY = 'AIzaSyDMMoL4G5FDGPNUB2e84XNsNIQo68USVdQ'; // Key mặc định (fallback)
 
-// Helper lấy API Key ưu tiên từ LocalStorage
+// Fetches the global API key from Supabase
+async function fetchGlobalApiKey() {
+    try {
+        const { data, error } = await sb
+            .from('app_config')
+            .select('value')
+            .eq('key', 'gemini_api_key')
+            .maybeSingle(); // Use maybeSingle to avoid error if row doesn't exist
+
+        if (!error && data && data.value) {
+            globalApiKey = data.value;
+            console.log("Global API Key loaded.");
+        }
+    } catch (e) {
+        console.warn("Could not fetch global API key (table might not exist):", e);
+    }
+}
+
+// Saves the API Key to Supabase so everyone can use it
+async function saveGlobalApiKey(key) {
+    try {
+        const { error } = await sb
+            .from('app_config')
+            .upsert({ key: 'gemini_api_key', value: key });
+
+        if (error) throw error;
+        
+        globalApiKey = key;
+        return true;
+    } catch (e) {
+        console.error("Error saving global API key:", e);
+        showToast("Lỗi lưu Key lên hệ thống (có thể do thiếu bảng app_config). Đã lưu cục bộ.", "info");
+        return false;
+    }
+}
+
+// Helper lấy API Key ưu tiên: Global -> LocalStorage -> Default
 const getApiKey = () => {
+    // 1. Global Key from DB (Highest priority for shared use)
+    if (globalApiKey && globalApiKey.trim().length > 10) return globalApiKey;
+
+    // 2. Local Storage (Fallback for individual overrides or offline dev)
     const storedKey = localStorage.getItem('user_gemini_api_key');
-    return storedKey && storedKey.trim().length > 10 ? storedKey : DEFAULT_API_KEY;
+    if (storedKey && storedKey.trim().length > 10) return storedKey;
+
+    // 3. Default
+    return DEFAULT_API_KEY;
 };
 
-// --- TOOL DEFINITIONS ---
-
+// ... (Existing Tool Definitions) ...
 const searchListingsTool = {
     name: 'search_listings',
     description: 'Search for tender listings. Use this to find specific contracts by code, hospital, or status.',
@@ -127,8 +169,12 @@ const openAddFormTool = {
     }
 };
 
-export function initChatbot() {
+export async function initChatbot() {
+    // 1. Fetch Global Key first
+    await fetchGlobalApiKey();
+
     const toggleBtn = document.getElementById('chatbot-toggle-btn');
+    const headerToggleBtn = document.getElementById('header-chatbot-btn'); // Mobile Header Button
     const closeBtn = document.getElementById('chatbot-close-btn');
     const minimizeBtn = document.getElementById('chatbot-minimize-btn');
     const chatWindow = document.getElementById('chatbot-window');
@@ -137,38 +183,34 @@ export function initChatbot() {
     const fileInput = document.getElementById('chatbot-file-input');
     const removeImgBtn = document.getElementById('chatbot-remove-img');
 
-    if (!toggleBtn || !chatWindow) return;
+    if (!chatWindow) return;
 
     // --- SETUP TƯƠNG TÁC GIAO DIỆN ---
     
-    // 1. Giao diện & Hiển thị Mobile (Shopee Style)
-    toggleBtn.classList.remove('hidden'); 
-    toggleBtn.style.display = 'flex';     
-    toggleBtn.style.zIndex = '9999';      
-    
-    // Đảm bảo cửa sổ chat đè lên nút toggle (z-index cao hơn)
-    chatWindow.style.zIndex = '10000';
+    // Toggle Button Logic (FAB)
+    if (toggleBtn) {
+        // Draggable Logic for FAB
+        makeElementDraggable(toggleBtn, { isToggle: true, linkedEl: chatWindow });
+        makeElementDraggable(chatWindow, { isWindow: true, linkedEl: toggleBtn });
+    }
 
-    // === FIX 1: Giảm kích thước trên mobile (w-12 h-12) và giữ nguyên desktop (md:w-16 md:h-16) ===
-    toggleBtn.className = "fixed bottom-6 right-6 p-0 w-12 h-12 md:w-16 md:h-16 bg-[#9333ea] hover:bg-[#7e22ce] rounded-full shadow-2xl hover:scale-105 transition-transform flex items-center justify-center cursor-pointer border-2 border-white";
-    toggleBtn.innerHTML = `
-        <div class="relative flex items-center justify-center w-full h-full">
-            <img src="https://cdn-icons-png.flaticon.com/128/69/69059.png" alt="Chatbot Icon" class="w-6 h-6 md:w-10 md:h-10 object-contain filter brightness-0 invert">
-            <span class="absolute top-0 right-0 flex h-3.5 w-3.5">
-              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-              <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-red-500 border-2 border-[#9333ea]"></span>
-            </span>
-        </div>
-    `;
+    // Toggle Button Logic (Mobile Header)
+    if (headerToggleBtn) {
+        headerToggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            chatWindow.classList.toggle('hidden');
+            if (!chatWindow.classList.contains('hidden')) {
+                alignChatWindowToButton(headerToggleBtn, chatWindow); // Re-use alignment logic (will trigger mobile bottom sheet mode)
+                document.getElementById('chatbot-input').focus();
+                if (!chatSession) startNewSession();
+            }
+        });
+    }
 
-    // 2. Kéo thả LIÊN KẾT (Cửa sổ và Nút dính nhau)
-    makeElementDraggable(toggleBtn, { isToggle: true, linkedEl: chatWindow });
-    makeElementDraggable(chatWindow, { isWindow: true, linkedEl: toggleBtn });
-
-    // 4. Co dãn kích thước cửa sổ (RESIZE) - GÓC TRÊN TRÁI
+    // Resize Logic
     initResizableTopLeft(chatWindow);
 
-    // 5. MỚI: Thêm nút Cài đặt API Key
+    // Settings UI
     injectSettingsUI();
     // ---------------------------------
 
@@ -249,13 +291,11 @@ function injectSettingsUI() {
     if (!minimizeBtn) return;
 
     // A. Tạo nút Cài đặt (Icon bánh răng)
-    // Kiểm tra nếu chưa có thì mới tạo
     if (!document.getElementById('chatbot-settings-btn')) {
         const settingsBtn = document.createElement('button');
         settingsBtn.id = 'chatbot-settings-btn';
         settingsBtn.className = "text-white hover:text-gray-200 transition-colors mr-2 opacity-80 hover:opacity-100";
         settingsBtn.title = "Cài đặt API Key";
-        // Icon Bánh răng (SVG)
         settingsBtn.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="3"></circle>
@@ -263,16 +303,13 @@ function injectSettingsUI() {
             </svg>
         `;
         settingsBtn.onclick = openSettingsModal;
-
-        // Chèn vào trước nút minimize (trên header)
         minimizeBtn.parentNode.insertBefore(settingsBtn, minimizeBtn);
     }
 
-    // B. Tạo Modal nhập Key (Ẩn mặc định)
+    // B. Tạo Modal nhập Key
     if (!document.getElementById('chatbot-settings-modal')) {
         const modal = document.createElement('div');
         modal.id = 'chatbot-settings-modal';
-        // Style: Overlay đè lên toàn bộ nội dung cửa sổ chat
         modal.className = 'hidden absolute inset-0 bg-gray-900/90 flex flex-col items-center justify-center z-50 rounded-2xl p-4 backdrop-blur-sm';
         modal.innerHTML = `
             <div class="bg-white dark:bg-gray-800 p-5 rounded-xl w-full shadow-2xl border border-gray-200 dark:border-gray-700">
@@ -280,6 +317,7 @@ function injectSettingsUI() {
                     🔑 Cài đặt API Key
                 </h3>
                 <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                    Nhập key riêng của bạn để dùng. Nếu bạn là Admin, key này sẽ được lưu lên hệ thống cho mọi người dùng chung.
                 </p>
                 
                 <div class="space-y-3">
@@ -300,17 +338,21 @@ function injectSettingsUI() {
         `;
         document.getElementById('chatbot-window').appendChild(modal);
 
-        // Logic xử lý sự kiện
         document.getElementById('cancel-settings').onclick = () => modal.classList.add('hidden');
         
-        document.getElementById('save-settings').onclick = () => {
+        document.getElementById('save-settings').onclick = async () => {
             const key = document.getElementById('custom-api-key').value.trim();
             if (key) {
+                // 1. Save Local
                 localStorage.setItem('user_gemini_api_key', key);
-                // Khởi tạo lại client với key mới ngay lập tức
+                
+                // 2. Attempt Save Global (will persist if table exists)
+                await saveGlobalApiKey(key);
+
+                // 3. Re-init Client
                 aiClient = new GoogleGenAI({ apiKey: key });
-                chatSession = null; // Reset session để dùng config mới
-                showToast('✅ Đã lưu API Key mới!', 'success');
+                chatSession = null; 
+                showToast('✅ Đã lưu API Key!', 'success');
                 modal.classList.add('hidden');
             } else {
                 showToast('Vui lòng nhập Key hợp lệ.', 'error');
@@ -318,12 +360,15 @@ function injectSettingsUI() {
         };
 
         document.getElementById('remove-key').onclick = () => {
-            if(confirm("Bạn có chắc muốn xóa Key cá nhân và quay về dùng Key hệ thống?")) {
+            if(confirm("Bạn có chắc muốn xóa Key?")) {
                 localStorage.removeItem('user_gemini_api_key');
-                aiClient = new GoogleGenAI({ apiKey: DEFAULT_API_KEY });
+                // Note: We don't delete global key here to prevent accidental system breakage by non-admins if logic was different
+                // Reset to whatever global key exists or default
+                const newKey = globalApiKey || DEFAULT_API_KEY;
+                aiClient = new GoogleGenAI({ apiKey: newKey });
                 chatSession = null;
                 document.getElementById('custom-api-key').value = '';
-                showToast('Đã khôi phục API Key mặc định.', 'info');
+                showToast('Đã khôi phục API Key mặc định/hệ thống.', 'info');
                 modal.classList.add('hidden');
             }
         };
@@ -334,30 +379,22 @@ function openSettingsModal() {
     const modal = document.getElementById('chatbot-settings-modal');
     const input = document.getElementById('custom-api-key');
     if (modal && input) {
-        // Điền key hiện tại (nếu có)
-        input.value = localStorage.getItem('user_gemini_api_key') || '';
+        // Show current effective key (prioritize global if loaded)
+        input.value = getApiKey() === DEFAULT_API_KEY ? '' : getApiKey();
         modal.classList.remove('hidden');
     }
 }
 
-// ... (Các hàm còn lại giữ nguyên như cũ) ...
+// ... (Other UI Functions: initResizableTopLeft, makeElementDraggable, alignChatWindowToButton, handleImageSelect, renderSuggestions, etc.) ...
 
-/**
- * Hàm thay đổi kích thước từ GÓC TRÊN TRÁI (Top-Left)
- * @param {HTMLElement} el - Phần tử cửa sổ chat
- */
 function initResizableTopLeft(el) {
-    // Tạo phần tử tay nắm (Handle) ở góc TRÊN TRÁI
     const handle = document.createElement('div');
-    
-    // Style: Góc trên trái, con trỏ chéo
     handle.className = 'absolute cursor-nwse-resize z-[100] flex items-center justify-center bg-transparent';
     handle.style.width = '24px';
     handle.style.height = '24px';
-    handle.style.left = '0'; // Căn trái
-    handle.style.top = '0';  // Căn trên
+    handle.style.left = '0'; 
+    handle.style.top = '0';
     
-    // Icon góc vuông ở góc trên trái
     handle.innerHTML = `
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg" class="text-gray-400 opacity-80 rotate-180">
             <path d="M11 1V11H1L11 1Z" fill="currentColor"/>
@@ -365,71 +402,50 @@ function initResizableTopLeft(el) {
     `;
 
     el.appendChild(handle);
-
-    // Kích thước tối thiểu
-    el.style.minWidth = '300px'; // Giảm 1 chút cho màn hình bé
+    el.style.minWidth = '300px';
     el.style.minHeight = '400px';
 
     let isResizing = false;
     let startX, startY, startWidth, startHeight, startLeft, startTop;
 
     const onMouseDown = (e) => {
-        // Tắt tính năng resize trên Mobile để tránh lỗi
         if (window.innerWidth < 768) return;
-
         e.stopPropagation();
         e.preventDefault();
-
         isResizing = true;
-        // Lấy tọa độ chuột ban đầu
         startX = e.clientX || e.touches[0].clientX;
         startY = e.clientY || e.touches[0].clientY;
-        
-        // Lấy thông số hình học ban đầu của cửa sổ
         const rect = el.getBoundingClientRect();
         startWidth = rect.width;
         startHeight = rect.height;
         startLeft = rect.left;
         startTop = rect.top;
-
-        // Reset style để dùng top/left thay vì bottom/right (tránh xung đột)
         el.style.bottom = 'auto';
         el.style.right = 'auto';
         el.style.left = startLeft + 'px';
         el.style.top = startTop + 'px';
-
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup', onMouseUp);
         document.addEventListener('touchmove', onMouseMove, { passive: false });
         document.addEventListener('touchend', onMouseUp);
-        
         document.body.style.cursor = 'nwse-resize';
     };
 
     const onMouseMove = (e) => {
         if (!isResizing) return;
-        
         const clientX = e.clientX || e.touches[0].clientX;
         const clientY = e.clientY || e.touches[0].clientY;
-
-        // Tính toán khoảng dịch chuyển
         const dx = clientX - startX;
         const dy = clientY - startY;
-
-        // Kích thước mới = Kích thước cũ - dịch chuyển (Kéo sang trái -> width tăng)
         const newWidth = startWidth - dx;
         const newHeight = startHeight - dy;
-
-        // Cập nhật Width & Left (Nếu width > min)
         if (newWidth > 300) {
             el.style.width = `${newWidth}px`;
-            el.style.left = `${startLeft + dx}px`; // Cửa sổ phải dịch chuyển theo chuột
+            el.style.left = `${startLeft + dx}px`;
         }
-
-        // Cập nhật Height & Top (Nếu height > min)
         if (newHeight > 400) {
             el.style.height = `${newHeight}px`;
-            el.style.top = `${startTop + dy}px`;   // Cửa sổ phải dịch chuyển theo chuột
+            el.style.top = `${startTop + dy}px`;
         }
     };
 
@@ -446,32 +462,20 @@ function initResizableTopLeft(el) {
     handle.addEventListener('touchstart', onMouseDown);
 }
 
-/**
- * Hàm xử lý kéo thả di chuyển (Draggable) - HỖ TRỢ LIÊN KẾT 2 PHẦN TỬ
- */
 function makeElementDraggable(el, options = {}) {
     let isDragging = false;
     let hasMoved = false;
     let startX, startY, initialLeft, initialTop;
-    
-    // Biến cho phần tử liên kết (nếu có)
     let linkedEl = options.linkedEl;
     let linkedInitialLeft, linkedInitialTop;
-
     const chatWindow = document.getElementById('chatbot-window');
 
     const onMouseDown = (e) => {
-        // === QUAN TRỌNG: Tắt kéo thả cửa sổ chat trên mobile ===
-        // Lý do: Để cửa sổ cố định ở đáy, tránh việc tính toán lại vị trí làm văng cửa sổ khi bàn phím bật lên
         if (options.isWindow && window.innerWidth < 768) return;
-
         if (e.button !== 0 && e.type !== 'touchstart') return;
-
-        // Logic riêng cho Window: Chỉ kéo khi nắm vào Header
         if (options.isWindow) {
             const rect = el.getBoundingClientRect();
             const clickY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
-            // Chỉ cho phép kéo ở phần header (60px đầu tiên)
             if (clickY - rect.top > 60 || ['INPUT', 'BUTTON', 'TEXTAREA', 'I', 'SVG', 'PATH'].includes(e.target.tagName)) return;
         }
 
@@ -484,7 +488,6 @@ function makeElementDraggable(el, options = {}) {
         startX = clientX;
         startY = clientY;
         
-        // --- CHUẨN BỊ PHẦN TỬ CHÍNH ---
         const rect = el.getBoundingClientRect();
         initialLeft = rect.left;
         initialTop = rect.top;
@@ -495,13 +498,10 @@ function makeElementDraggable(el, options = {}) {
         el.style.top = initialTop + 'px';
         el.style.cursor = 'grabbing';
         
-        // --- CHUẨN BỊ PHẦN TỬ LIÊN KẾT (NẾU CÓ) ---
         if (linkedEl) {
             const lRect = linkedEl.getBoundingClientRect();
             linkedInitialLeft = lRect.left;
             linkedInitialTop = lRect.top;
-            
-            // Chuyển sang fixed positioning để di chuyển mượt mà
             linkedEl.style.bottom = 'auto';
             linkedEl.style.right = 'auto';
             linkedEl.style.left = linkedInitialLeft + 'px';
@@ -522,25 +522,19 @@ function makeElementDraggable(el, options = {}) {
     const onMouseMove = (e) => {
         if (!isDragging) return;
         e.preventDefault(); 
-
         const clientX = e.type.includes('mouse') ? e.clientX : e.touches[0].clientX;
         const clientY = e.type.includes('mouse') ? e.clientY : e.touches[0].clientY;
-        
         const dx = clientX - startX;
         const dy = clientY - startY;
-        
         if (Math.abs(dx) > 5 || Math.abs(dy) > 5) hasMoved = true;
 
-        // Di chuyển phần tử chính
         let newLeft = initialLeft + dx;
         let newTop = initialTop + dy;
-        
         const winW = window.innerWidth;
         const winH = window.innerHeight;
         const elW = el.offsetWidth;
         const elH = el.offsetHeight;
 
-        // Giới hạn màn hình
         if (newLeft < 0) newLeft = 0;
         if (newLeft + elW > winW) newLeft = winW - elW;
         if (newTop < 0) newTop = 0;
@@ -549,13 +543,9 @@ function makeElementDraggable(el, options = {}) {
         el.style.left = newLeft + 'px';
         el.style.top = newTop + 'px';
 
-        // --- DI CHUYỂN PHẦN TỬ LIÊN KẾT ---
         if (linkedEl) {
-            // Phần tử liên kết di chuyển cùng một lượng delta (dx, dy)
             let lNewLeft = linkedInitialLeft + dx;
             let lNewTop = linkedInitialTop + dy;
-            
-            // (Tùy chọn: Có thể thêm giới hạn màn hình cho linkedEl ở đây nếu muốn)
             linkedEl.style.left = lNewLeft + 'px';
             linkedEl.style.top = lNewTop + 'px';
         }
@@ -567,12 +557,7 @@ function makeElementDraggable(el, options = {}) {
         document.body.style.userSelect = '';
         
         if (e.type === 'touchend') {
-             // === FIX CRITICAL MOBILE BUG ===
-             // Prevent "Ghost Click" (simulated mouse events) on mobile devices.
-             // This prevents the toggle logic from firing twice (Touch End -> Mouse Up),
-             // which causes the window to open and close instantly.
              if (e.cancelable) e.preventDefault();
-
              document.removeEventListener('touchmove', onMouseMove);
              document.removeEventListener('touchend', onMouseUp);
         } else {
@@ -581,16 +566,13 @@ function makeElementDraggable(el, options = {}) {
         }
 
         if (options.isToggle && !hasMoved) {
-            // Debounce check: Prevent multiple executions within 300ms
             const now = Date.now();
             if (el.lastToggle && now - el.lastToggle < 300) return;
             el.lastToggle = now;
 
             chatWindow.classList.toggle('hidden');
             if (!chatWindow.classList.contains('hidden')) {
-                // --- KHI MỞ CHAT: TỰ ĐỘNG CĂN VỊ TRÍ ---
                 alignChatWindowToButton(el, chatWindow);
-                
                 document.getElementById('chatbot-input').focus();
                 if (!chatSession) startNewSession();
             }
@@ -601,48 +583,31 @@ function makeElementDraggable(el, options = {}) {
     el.addEventListener('touchstart', onMouseDown, { passive: false });
 }
 
-// === FIX 2: Cập nhật hàm căn vị trí để KHÔNG BỊ ẨN KHI BẬT BÀN PHÍM ===
 function alignChatWindowToButton(btn, win) {
     const winW = window.innerWidth;
-    const winH = window.innerHeight;
     
-    // === MOBILE (< 768px): CHẾ ĐỘ "BOTTOM SHEET" ===
+    // MOBILE: Bottom Sheet Mode
     if (winW < 768) {
-        // Thay vì căn giữa (center), ta sẽ ghim chặt xuống đáy màn hình (bottom: 0)
-        // và reset top thành 'auto'. Khi bàn phím bật lên, viewport nhỏ lại,
-        // bottom: 0 sẽ tự đẩy cửa sổ lên theo bàn phím, không bị che.
         win.style.position = 'fixed';
-        win.style.top = 'auto'; // QUAN TRỌNG: Reset top để không bị cố định vị trí cũ
-        win.style.bottom = '0'; // Ghim đáy
+        win.style.top = 'auto'; 
+        win.style.bottom = '0'; 
         win.style.left = '0';
         win.style.right = '0';
-        
-        // Kích thước full ngang, cao 85% màn hình
         win.style.width = '100%';
         win.style.height = '85vh'; 
         win.style.maxHeight = '100%';
-        
-        // Bo tròn góc trên cho đẹp
         win.style.borderRadius = '16px 16px 0 0';
         win.style.margin = '0';
-        win.style.transform = 'none'; // Xóa transform nếu có
-
-        // Đảm bảo z-index cao nhất
+        win.style.transform = 'none'; 
         win.style.zIndex = '10000';
         return;
     }
 
-    // === DESKTOP: GIỮ NGUYÊN LOGIC CŨ ===
+    // DESKTOP
     const btnRect = btn.getBoundingClientRect();
     const winRect = win.getBoundingClientRect();
-    
-    // Top = Đỉnh nút - Chiều cao cửa sổ - 10px khoảng cách
     let newTop = btnRect.top - winRect.height - 10;
-    
-    // Left = Căn phải cửa sổ thẳng hàng với căn phải nút
     let newLeft = (btnRect.left + btnRect.width) - winRect.width;
-
-    // Giới hạn không cho tràn màn hình
     if (newTop < 10) newTop = 10; 
     if (newLeft < 10) newLeft = 10; 
     
@@ -650,9 +615,9 @@ function alignChatWindowToButton(btn, win) {
     win.style.right = 'auto';
     win.style.top = newTop + 'px';
     win.style.left = newLeft + 'px';
-    win.style.width = ''; // Reset width trên desktop
-    win.style.height = ''; // Reset height trên desktop
-    win.style.borderRadius = ''; // Reset border radius
+    win.style.width = ''; 
+    win.style.height = ''; 
+    win.style.borderRadius = ''; 
 }
 
 function handleImageSelect(file) {
@@ -794,21 +759,11 @@ async function sendMessageToAI(text, imageFile) {
                         result = { message: "Không tìm thấy hồ sơ." };
                     }
                 } 
-                // --- FIX LOGIC KIỂM TRA HỒ SƠ HẾT HẠN ---
                 else if (fnName === 'check_expiring_contracts') {
                     const mode = args.mode || 'upcoming';
                     const days = args.days || 30;
-                    
-                    // Lấy ngày hiện tại chuẩn YYYY-MM-DD
                     const todayStr = new Date().toISOString().split('T')[0];
-                    
-                    console.log(`[Debug AI] Mode: ${mode}, Today: ${todayStr}`);
-
-                    let query = sb.from('listing')
-                        .select('ma_thau, benh_vien, ngay_ket_thuc, tinh_trang, psr')
-                        .order('ngay_ket_thuc', { ascending: true })
-                        .limit(20);
-
+                    let query = sb.from('listing').select('ma_thau, benh_vien, ngay_ket_thuc, tinh_trang, psr').order('ngay_ket_thuc', { ascending: true }).limit(20);
                     let msg = "";
 
                     if (mode === 'expired') {
@@ -820,11 +775,9 @@ async function sendMessageToAI(text, imageFile) {
                         msg = `Kiểm tra hồ sơ hết hạn từ ${start} đến ${end}...`;
                         query = query.gte('ngay_ket_thuc', start).lte('ngay_ket_thuc', end);
                     } else {
-                        // Mặc định: Sắp hết hạn (Upcoming)
                         const future = new Date();
                         future.setDate(future.getDate() + days);
                         const futureStr = future.toISOString().split('T')[0];
-                        
                         msg = `Kiểm tra hồ sơ sắp hết hạn từ ${todayStr} đến ${futureStr}...`;
                         query = query.gte('ngay_ket_thuc', todayStr).lte('ngay_ket_thuc', futureStr);
                     }
@@ -832,29 +785,18 @@ async function sendMessageToAI(text, imageFile) {
                     appendMessage(`⏳ ${msg}`, 'ai');
                     const { data, error } = await query;
 
-                    // Log để debug trong Console F12
-                    console.log("[Debug AI] Query Result:", data);
-                    console.log("[Debug AI] Query Error:", error);
-
                     if (error) {
                         result = { message: `Lỗi truy vấn: ${error.message}` };
                     } else if (!data || data.length === 0) {
-                        result = { 
-                            message: `Không tìm thấy hồ sơ nào trong khoảng thời gian này. Vui lòng kiểm tra lại định dạng cột ngày tháng trong cơ sở dữ liệu.` 
-                        };
+                        result = { message: `Không tìm thấy hồ sơ nào trong khoảng thời gian này.` };
                     } else {
-                         // Format ngày hiển thị cho đẹp
                         const formattedData = data.map(item => ({
                             ...item,
                             ngay_ket_thuc: item.ngay_ket_thuc ? item.ngay_ket_thuc.split('-').reverse().join('/') : 'N/A'
                         }));
-                        result = { 
-                            count: data.length,
-                            listings: formattedData 
-                        };
+                        result = { count: data.length, listings: formattedData };
                     }
                 }
-                // ----------------------------------------
                 else if (fnName === 'search_product_history') {
                     const pCode = args.product_code;
                     appendMessage(`📦 Đang tham khảo dữ liệu tổng hợp cho "${pCode}"...`, 'ai');
@@ -910,9 +852,7 @@ async function sendMessageToAI(text, imageFile) {
                     }
                 }
                 else if (fnName === 'get_general_stats') {
-                    // 1. Get Listing Stats (Count)
                     const { data: listingData } = await sb.from('listing').select('tinh_trang');
-                    // 2. Get Detail Stats (Value)
                     const { data: details } = await sb.from('detail').select('quota, sl_trung, tinh_trang');
 
                     let listingStats = { total: 0, win: 0 };
@@ -957,37 +897,19 @@ async function sendMessageToAI(text, imageFile) {
                 }
                 else if (fnName === 'analyze_psr_performance') {
                     appendMessage(`📊 Đang tính toán hiệu suất PSR (Hồ sơ & Doanh số)...`, 'ai');
-                    
-                    const { data: details, error } = await sb
-                        .from('detail')
-                        .select('psr, ma_thau, quota, sl_trung, tinh_trang');
+                    const { data: details, error } = await sb.from('detail').select('psr, ma_thau, quota, sl_trung, tinh_trang');
 
                     if (error || !details || details.length === 0) {
                         result = { message: "Không tìm thấy dữ liệu chi tiết thầu." };
                     } else {
                         const stats = {};
-                        
                         details.forEach(d => {
                             const psrName = d.psr || "Chưa phân công";
-                            if (!stats[psrName]) {
-                                stats[psrName] = { 
-                                    // Value Metrics
-                                    total_quota: 0, 
-                                    win_revenue: 0,
-                                    // Contract Metrics (Using Set to count unique contracts)
-                                    contract_ids: new Set(),
-                                    win_contract_ids: new Set()
-                                };
-                            }
-                            
+                            if (!stats[psrName]) stats[psrName] = { total_quota: 0, win_revenue: 0, contract_ids: new Set(), win_contract_ids: new Set() };
                             const q = d.quota || 0;
                             const w = d.sl_trung || 0;
-                            
-                            // Value Accumulation
                             stats[psrName].total_quota += q;
                             if (d.tinh_trang === 'Win') stats[psrName].win_revenue += w;
-
-                            // Contract Counting
                             stats[psrName].contract_ids.add(d.ma_thau);
                             if (d.tinh_trang === 'Win') stats[psrName].win_contract_ids.add(d.ma_thau);
                         });
@@ -996,90 +918,44 @@ async function sendMessageToAI(text, imageFile) {
                             const totalContracts = val.contract_ids.size;
                             const winContracts = val.win_contract_ids.size;
                             const contractRate = totalContracts > 0 ? ((winContracts / totalContracts) * 100).toFixed(1) + '%' : '0%';
-                            
                             const valueRate = val.total_quota > 0 ? ((val.win_revenue / val.total_quota) * 100).toFixed(1) + '%' : '0%';
-
                             return {
                                 psr: psr,
-                                contracts: {
-                                    total: totalContracts,
-                                    won: winContracts,
-                                    win_rate: contractRate
-                                },
-                                value: {
-                                    quota: val.total_quota.toLocaleString('vi-VN'),
-                                    revenue: val.win_revenue.toLocaleString('vi-VN'),
-                                    win_rate: valueRate
-                                }
+                                contracts: { total: totalContracts, won: winContracts, win_rate: contractRate },
+                                value: { quota: val.total_quota.toLocaleString('vi-VN'), revenue: val.win_revenue.toLocaleString('vi-VN'), win_rate: valueRate }
                             };
-                        }).sort((a, b) => {
-                            const revA = parseFloat(a.value.revenue.replace(/\./g, ''));
-                            const revB = parseFloat(b.value.revenue.replace(/\./g, ''));
-                            return revB - revA;
-                        });
+                        }).sort((a, b) => parseFloat(b.value.revenue.replace(/\./g, '')) - parseFloat(a.value.revenue.replace(/\./g, '')));
 
-                        result = { 
-                            note: "Báo cáo phân biệt rõ Tỉ lệ thắng theo Hồ sơ (Contracts) và Theo Doanh số (Value).",
-                            psr_ranking: report 
-                        };
+                        result = { note: "Báo cáo phân biệt rõ Tỉ lệ thắng theo Hồ sơ (Contracts) và Theo Doanh số (Value).", psr_ranking: report };
                     }
                 }
                 else if (fnName === 'get_psr_products') {
                     const psrName = args.psr_name;
                     appendMessage(`🕵️‍♀️ Đang thống kê chi tiết sản phẩm của PSR "${psrName}"...`, 'ai');
-                    
-                    const { data: details, error } = await sb
-                        .from('detail')
-                        .select('ma_vt, quota, sl_trung, tinh_trang')
-                        .ilike('psr', `%${psrName}%`); 
-                    
+                    const { data: details, error } = await sb.from('detail').select('ma_vt, quota, sl_trung, tinh_trang').ilike('psr', `%${psrName}%`); 
                     if (error || !details || details.length === 0) {
                         result = { message: `Không tìm thấy dữ liệu thầu nào cho PSR "${psrName}".` };
                     } else {
                         const stats = {};
-                        
                         details.forEach(d => {
                             const prod = d.ma_vt || "Unknown";
-                            if (!stats[prod]) {
-                                stats[prod] = { 
-                                    bids: 0, // Number of times participated (lines in detail table)
-                                    wins: 0, // Number of times status was 'Win'
-                                    total_quota: 0, 
-                                    total_won: 0 
-                                };
-                            }
-                            
+                            if (!stats[prod]) stats[prod] = { bids: 0, wins: 0, total_quota: 0, total_won: 0 };
                             const q = d.quota || 0;
                             const w = d.sl_trung || 0;
-                            
                             stats[prod].bids++;
                             stats[prod].total_quota += q;
-                            
-                            if (d.tinh_trang === 'Win') {
-                                stats[prod].wins++;
-                                stats[prod].total_won += w;
-                            }
+                            if (d.tinh_trang === 'Win') { stats[prod].wins++; stats[prod].total_won += w; }
                         });
 
-                        // Fetch Names for nicer display
                         const uniqueMaVts = Object.keys(stats);
-                        const { data: productInfos } = await sb
-                            .from('product')
-                            .select('ma_vt, ten_vt')
-                            .in('ma_vt', uniqueMaVts);
-                        
+                        const { data: productInfos } = await sb.from('product').select('ma_vt, ten_vt').in('ma_vt', uniqueMaVts);
                         const nameMap = {};
-                        if (productInfos) {
-                            productInfos.forEach(p => nameMap[p.ma_vt] = p.ten_vt);
-                        }
+                        if (productInfos) productInfos.forEach(p => nameMap[p.ma_vt] = p.ten_vt);
 
                         const summaryList = uniqueMaVts.map(ma_vt => {
                             const s = stats[ma_vt];
-                            // Contract Win Rate (Wins / Bids)
                             const contractWinRate = s.bids > 0 ? ((s.wins / s.bids) * 100).toFixed(1) : '0';
-                            // Volume Win Rate (Won Value / Total Quota)
                             const volumeWinRate = s.total_quota > 0 ? ((s.total_won / s.total_quota) * 100).toFixed(1) : '0';
-
                             return {
                                 ma_vt: ma_vt,
                                 ten_vt: nameMap[ma_vt] || "Chưa có tên",
@@ -1090,16 +966,9 @@ async function sendMessageToAI(text, imageFile) {
                                 contract_win_rate: `${contractWinRate}%`,
                                 volume_win_rate: `${volumeWinRate}%`
                             };
-                        }).sort((a, b) => {
-                            // Sort by total quota descending
-                            return parseFloat(b.total_quota.replace(/\./g,'')) - parseFloat(a.total_quota.replace(/\./g,''));
-                        });
+                        }).sort((a, b) => parseFloat(b.total_quota.replace(/\./g,'')) - parseFloat(a.total_quota.replace(/\./g,'')));
 
-                        result = {
-                            psr: psrName,
-                            total_products_managed: uniqueMaVts.length,
-                            product_performance: summaryList.slice(0, 30) // Limit top 30
-                        };
+                        result = { psr: psrName, total_products_managed: uniqueMaVts.length, product_performance: summaryList.slice(0, 30) };
                     }
                 }
                 else if (fnName === 'navigate_to') {
@@ -1109,43 +978,25 @@ async function sendMessageToAI(text, imageFile) {
                 }
                 else if (fnName === 'open_add_listing_form') {
                     appendMessage(`📝 Đang phân tích và chuẩn bị form...`, 'ai');
-                    
-                    // 1. Auto-fill Time (Today/Year)
                     const now = new Date();
-                    if (!args.ngay) args.ngay = now.toISOString().split('T')[0]; // YYYY-MM-DD
+                    if (!args.ngay) args.ngay = now.toISOString().split('T')[0]; 
                     if (!args.nam) args.nam = now.getFullYear();
 
-                    // 2. Smart Fill from History (Region, Province, Distributor based on Hospital)
                     if (args.benh_vien) {
                         try {
-                            // Find the most recent entry for this hospital to guess details
-                            // Use ilike for flexible matching (e.g. "Bạch Mai" -> "BV Bạch Mai")
-                            const { data: history } = await sb
-                                .from('listing')
-                                .select('benh_vien, tinh, khu_vuc, loai, nha_phan_phoi, quan_ly, psr')
-                                .ilike('benh_vien', `%${args.benh_vien}%`) 
-                                .order('ngay', { ascending: false })
-                                .limit(1)
-                                .maybeSingle();
-
+                            const { data: history } = await sb.from('listing').select('benh_vien, tinh, khu_vuc, loai, nha_phan_phoi, quan_ly, psr').ilike('benh_vien', `%${args.benh_vien}%`).order('ngay', { ascending: false }).limit(1).maybeSingle();
                             if (history) {
-                                // Standardize hospital name if fuzzy match found
                                 if (history.benh_vien) args.benh_vien = history.benh_vien;
-                                
                                 if (!args.tinh) args.tinh = history.tinh;
                                 if (!args.khu_vuc) args.khu_vuc = history.khu_vuc;
                                 if (!args.loai) args.loai = history.loai;
                                 if (!args.nha_phan_phoi) args.nha_phan_phoi = history.nha_phan_phoi;
-                                if (!args.quan_ly) args.quan_ly = history.quan_ly; // Bonus: Auto-fill Manager
-                                if (!args.psr) args.psr = history.psr;             // Bonus: Auto-fill PSR
-                                
-                                appendMessage(`💡 Đã tìm thấy thông tin lịch sử của ${args.benh_vien}. Tự động điền: Tỉnh ${history.tinh}, NPP ${history.nha_phan_phoi}...`, 'ai');
+                                if (!args.quan_ly) args.quan_ly = history.quan_ly;
+                                if (!args.psr) args.psr = history.psr;
+                                appendMessage(`💡 Đã tìm thấy thông tin lịch sử của ${args.benh_vien}. Tự động điền...`, 'ai');
                             }
-                        } catch (err) {
-                            console.log("Auto-fill error", err);
-                        }
+                        } catch (err) { console.log("Auto-fill error", err); }
                     }
-
                     await showView('view-ton-kho');
                     setTimeout(() => openListingModal(args, false, true), 500);
                     result = { success: true, message: "Form opened with smart suggestions." };
@@ -1188,7 +1039,6 @@ function appendMessage(text, sender, imageFile = null) {
         contentHtml += `<img src="${url}" class="max-w-[200px] rounded-lg mb-2 border border-gray-200 dark:border-gray-600 block">`;
     }
     
-    // Sử dụng marked nếu có sẵn, nếu không thì dùng text thuần
     const formattedText = (sender === 'ai' && typeof marked !== 'undefined') ? marked.parse(text) : text;
 
     const bubbleClass = sender === 'user' 
