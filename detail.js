@@ -84,8 +84,8 @@ export async function onShowDetailView() {
 
     // Inject Structure
     // HYBRID LAYOUT: 
-    // - Mobile: Stats on top (toggleable), Footer simple.
-    // - Desktop: Stats on bottom (Footer), No toggle on top.
+    // - Mobile: Stats + Row Count on top (toggleable). Footer HIDDEN.
+    // - Desktop: Stats on bottom (Footer). No toggle on top.
     container.innerHTML = `
         <div class="flex flex-col h-full relative">
             <!-- Toolbar -->
@@ -139,6 +139,11 @@ export async function onShowDetailView() {
             <!-- Stats Panel (Top) - MOBILE ONLY -->
             <div id="stats-panel-mobile" class="md:hidden bg-blue-50 dark:bg-gray-800 border-b dark:border-gray-700 px-4 py-2 text-xs overflow-x-auto select-none transition-all duration-300 hidden">
                 <div class="flex flex-row items-center gap-4 min-w-max">
+                    <div class="flex items-center gap-2 whitespace-nowrap">
+                        <span class="text-gray-500" data-i18n="txt_rows">Dòng:</span>
+                        <span id="mob-row-count" class="text-gray-800 dark:text-gray-100 font-bold">0</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
                     <div class="flex items-center gap-1 whitespace-nowrap">
                         <span class="text-gray-500" data-i18n="dt_stat_quota">Quota:</span>
                         <span id="mob-total-quota" class="text-gray-800 dark:text-gray-100 font-bold">0</span>
@@ -179,11 +184,11 @@ export async function onShowDetailView() {
             <!-- Grid Container -->
             <div id="hot-container" class="flex-1 w-full overflow-hidden filters-hidden"></div>
 
-            <!-- Bottom Footer Bar -->
-            <div id="detail-footer" class="h-auto bg-white dark:bg-gray-800 border-t dark:border-gray-700 flex flex-col md:flex-row items-stretch md:items-center justify-between px-2 md:px-4 py-1 text-xs select-none shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-[200]">
+            <!-- Bottom Footer Bar (Desktop Only) -->
+            <div id="detail-footer" class="hidden md:flex h-auto bg-white dark:bg-gray-800 border-t dark:border-gray-700 md:flex-row items-center justify-between px-4 py-1 text-xs select-none shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-[200]">
                 
-                <!-- Desktop Stats (Hidden on Mobile) -->
-                <div class="hidden md:flex flex-1 items-center gap-4">
+                <!-- Desktop Stats -->
+                <div class="flex flex-1 items-center gap-4">
                     <div class="flex items-center gap-1 whitespace-nowrap flex-shrink-0">
                         <span class="text-gray-500" data-i18n="dt_stat_quota">Quota:</span>
                         <span id="desk-total-quota" class="text-gray-800 dark:text-gray-100 font-bold">0</span>
@@ -221,8 +226,8 @@ export async function onShowDetailView() {
                 </div>
 
                 <!-- Right Side: Selection Stats + Rows Info -->
-                <div class="flex items-center justify-between md:justify-end gap-4 flex-1 md:flex-none">
-                    <!-- Selection Stats (Hidden on mobile usually due to space, or styled differently) -->
+                <div class="flex items-center justify-end gap-4 flex-none">
+                    <!-- Selection Stats -->
                     <div id="selection-stats" class="hidden xl:flex items-center gap-3 text-gray-500 dark:text-gray-400 pr-2 border-r dark:border-gray-600 border-gray-300 mr-2"></div>
                     
                     <!-- Row Info -->
@@ -712,6 +717,10 @@ function updateFooterInfo(total) {
     const rowCountEl = document.getElementById('footer-row-count');
     if (rowCountEl) {
         rowCountEl.textContent = `${total} ${t('txt_rows')}`;
+    }
+    const mobRowCountEl = document.getElementById('mob-row-count');
+    if (mobRowCountEl) {
+        mobRowCountEl.textContent = total;
     }
 }
 
