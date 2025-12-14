@@ -1,4 +1,6 @@
 
+
+
 import { setLanguage, getCurrentLanguage } from './lang.js';
 import { initChatbot } from './chatbot.js';
 
@@ -341,6 +343,7 @@ function updateOnlineStatusUI() {
 // --- NOTIFICATION SYSTEM START ---
 
 let notifications = [];
+let contextMenuTargetId = null;
 
 function playNotificationSound() {
     // Simple beep sound using AudioContext for broader compatibility
@@ -363,6 +366,27 @@ function playNotificationSound() {
         }
     } catch (e) {
         console.log("Audio playback failed", e);
+    }
+}
+
+function formatNotificationTime(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    const now = new Date();
+    
+    // Check if it's today
+    const isToday = date.getDate() === now.getDate() &&
+                    date.getMonth() === now.getMonth() &&
+                    date.getFullYear() === now.getFullYear();
+    
+    if (isToday) {
+        // Only show time
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else {
+        // Show time and full date
+        const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const dateStr = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth()+1).padStart(2, '0')}/${date.getFullYear()}`;
+        return `${timeStr} ${dateStr}`;
     }
 }
 
@@ -401,6 +425,8 @@ async function initNotificationSystem() {
         if (!dropdown.classList.contains('hidden') && !dropdown.contains(e.target) && !btn.contains(e.target)) {
             dropdown.classList.add('hidden');
         }
+        // Also close context menu
+        hideContextMenu();
     });
 
     // 4. Mark all as read action
@@ -408,11 +434,24 @@ async function initNotificationSystem() {
         e.stopPropagation();
         await markAllNotificationsAsRead();
     });
+    
+    // 5. Init Context Menu listeners
+    const ctxMarkUnread = document.getElementById('ctx-mark-unread');
+    const ctxDelete = document.getElementById('ctx-delete');
+    
+    if(ctxMarkUnread) ctxMarkUnread.onclick = () => {
+        if(contextMenuTargetId) markAsUnread(contextMenuTargetId);
+        hideContextMenu();
+    };
+    
+    if(ctxDelete) ctxDelete.onclick = () => {
+        if(contextMenuTargetId) deleteNotification(contextMenuTargetId);
+        hideContextMenu();
+    };
 }
 
 async function fetchNotifications() {
     try {
-        // Assuming table 'thong_bao' exists: id, gui_den_gmail, tieu_de, noi_dung, loai, da_xem, ngay_tao, metadata
         const { data, error } = await sb
             .from('thong_bao')
             .select('*')
@@ -421,24 +460,21 @@ async function fetchNotifications() {
             .limit(20);
 
         if (!error) {
-            // AUTO-WELCOME: If no notifications exist, create one!
             if (data.length === 0) {
+                // ... (Auto-welcome logic unchanged) ...
                 const welcomeMsg = {
                     gui_den_gmail: currentUser.gmail,
                     tieu_de: "Chào mừng bạn!",
                     noi_dung: "Chào mừng bạn đến với hệ thống quản lý WH-B4 CRM. Đây là trung tâm thông báo của bạn.",
                     loai: "success"
                 };
-                // Insert silently
                 await sb.from('thong_bao').insert(welcomeMsg);
-                // Fetch again
                 const { data: newData } = await sb
                     .from('thong_bao')
                     .select('*')
                     .eq('gui_den_gmail', currentUser.gmail)
                     .order('ngay_tao', { ascending: false })
                     .limit(20);
-                
                 notifications = newData || [];
             } else {
                 notifications = data;
@@ -460,10 +496,8 @@ function updateNotificationUI() {
     const listEl = document.getElementById('notification-list');
     const badgeEl = document.getElementById('notification-badge');
     
-    // Count unread
     const unreadCount = notifications.filter(n => !n.da_xem).length;
     
-    // Update Badge
     if (unreadCount > 0) {
         badgeEl.textContent = unreadCount > 99 ? '99+' : unreadCount;
         badgeEl.classList.remove('hidden');
@@ -471,7 +505,6 @@ function updateNotificationUI() {
         badgeEl.classList.add('hidden');
     }
 
-    // Render List
     if (notifications.length === 0) {
         listEl.innerHTML = `<div class="p-4 text-center text-gray-500 text-xs">Không có thông báo mới</div>`;
         return;
@@ -480,29 +513,109 @@ function updateNotificationUI() {
     listEl.innerHTML = notifications.map(notif => {
         const bgClass = notif.da_xem ? 'bg-white dark:bg-gray-800' : 'bg-blue-50 dark:bg-gray-700/50';
         const iconColor = notif.loai === 'error' ? 'text-red-500' : (notif.loai === 'success' ? 'text-green-500' : 'text-blue-500');
-        const time = new Date(notif.ngay_tao).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         
-        // Special styling for admin approval notifications
+        // Use new time formatter
+        const timeStr = formatNotificationTime(notif.ngay_tao);
+        
         const isApproval = notif.loai === 'admin_approval';
         const titleClass = isApproval ? "text-indigo-700 dark:text-indigo-300" : "text-gray-900 dark:text-gray-100";
-        
-        // JSON stringify the metadata to pass to onclick
         const metadataStr = notif.metadata ? JSON.stringify(notif.metadata).replace(/"/g, '&quot;') : '{}';
         
         return `
-            <div class="p-3 ${bgClass} hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors flex gap-3" onclick="window.markSingleRead(${notif.id}, '${notif.loai}', ${metadataStr})">
+            <div class="notification-item p-3 ${bgClass} hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors flex gap-3 relative select-none" 
+                 data-id="${notif.id}" 
+                 onclick="window.markSingleRead(${notif.id}, '${notif.loai}', ${metadataStr})">
                 <div class="flex-shrink-0 mt-1">
                     <svg class="w-5 h-5 ${iconColor}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                 </div>
                 <div class="flex-1 min-w-0">
                     <p class="text-sm font-medium ${titleClass} truncate">${notif.tieu_de}</p>
                     <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 line-clamp-2">${notif.noi_dung}</p>
-                    <p class="text-[10px] text-gray-400 mt-1 text-right">${time}</p>
+                    <p class="text-[10px] text-gray-400 mt-1 text-right">${timeStr}</p>
                 </div>
                 ${!notif.da_xem ? '<div class="flex-shrink-0 self-center"><div class="w-2 h-2 bg-blue-500 rounded-full"></div></div>' : ''}
             </div>
         `;
     }).join('');
+
+    // Attach Context Menu Listeners (Right Click & Long Press)
+    document.querySelectorAll('.notification-item').forEach(item => {
+        const id = parseInt(item.dataset.id);
+
+        // Desktop: Right Click
+        item.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            showContextMenu(e.clientX, e.clientY, id);
+        });
+
+        // Mobile: Long Press
+        let timer;
+        const startPress = (e) => {
+            timer = setTimeout(() => {
+                const touch = e.touches ? e.touches[0] : e;
+                showContextMenu(touch.clientX, touch.clientY, id);
+            }, 500); // 500ms long press
+        };
+        const cancelPress = () => {
+            clearTimeout(timer);
+        };
+
+        item.addEventListener('touchstart', startPress, {passive: true});
+        item.addEventListener('touchend', cancelPress);
+        item.addEventListener('touchmove', cancelPress); // Cancel if scrolling
+    });
+}
+
+function showContextMenu(x, y, id) {
+    const menu = document.getElementById('notification-context-menu');
+    if (!menu) return;
+    
+    contextMenuTargetId = id;
+    
+    // Ensure menu doesn't go offscreen
+    const menuWidth = 192; // w-48
+    const menuHeight = 100; // Approx height
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+
+    let posX = x;
+    let posY = y;
+
+    if (x + menuWidth > winW) posX = winW - menuWidth - 10;
+    if (y + menuHeight > winH) posY = winH - menuHeight - 10;
+
+    menu.style.left = `${posX}px`;
+    menu.style.top = `${posY}px`;
+    menu.classList.remove('hidden');
+}
+
+function hideContextMenu() {
+    const menu = document.getElementById('notification-context-menu');
+    if (menu) menu.classList.add('hidden');
+    contextMenuTargetId = null;
+}
+
+async function markAsUnread(id) {
+    // Optimistic Update
+    const idx = notifications.findIndex(n => n.id === id);
+    if (idx !== -1) {
+        notifications[idx].da_xem = false;
+        updateNotificationUI();
+        // DB Update
+        await sb.from('thong_bao').update({ da_xem: false }).eq('id', id);
+    }
+}
+
+async function deleteNotification(id) {
+    // Optimistic Update
+    const idx = notifications.findIndex(n => n.id === id);
+    if (idx !== -1) {
+        notifications.splice(idx, 1);
+        updateNotificationUI();
+        // DB Update
+        await sb.from('thong_bao').delete().eq('id', id);
+    }
 }
 
 // Global helper to mark single read (attached to window for onclick access)
@@ -517,20 +630,16 @@ window.markSingleRead = async (id, type, metadata = {}) => {
         await sb.from('thong_bao').update({ da_xem: true }).eq('id', id);
     }
     
-    // Handle Redirection for Admin Approvals
+    // Handle Redirection
     if (type === 'admin_approval') {
         await showView('view-cai-dat');
         import('./caidat.js').then(({ openAdminSettingsTab }) => {
              if (openAdminSettingsTab) openAdminSettingsTab();
         });
     }
-
-    // Handle specific types (e.g., Excel Import) for robust navigation without relying on Metadata
     if (type === 'excel_import') {
         await showView('view-ton-kho');
     }
-    
-    // Handle Generic View Navigation from Metadata
     if (metadata && metadata.view) {
         await showView(metadata.view);
     }
