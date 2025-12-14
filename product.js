@@ -7,7 +7,6 @@ import { translations, getCurrentLanguage, setLanguage } from './lang.js';
 let hot; // Handsontable instance
 let allData = []; // Full dataset from DB
 let displayedData = []; // Filtered dataset
-// Pagination Removed
 let productRealtimeChannel = null;
 let isProductLoaded = false; // Caching flag
 let currentManagingProduct = null; // Stores data of product currently being edited in image modal
@@ -219,8 +218,8 @@ export async function onShowProductView(params = null) {
                 </div>
                 <div class="h-6 w-px bg-gray-300 dark:bg-gray-600 mx-1 hidden md:block"></div>
                 
-                <!-- Eye Toggle (Show/Hide Stats) -->
-                <button id="btn-toggle-prod-stats" class="flex items-center justify-center p-1.5 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 transition-colors" title="Hiện/Ẩn số liệu">
+                <!-- Eye Toggle (Show/Hide Stats) - MOBILE ONLY -->
+                <button id="btn-toggle-prod-stats" class="md:hidden flex items-center justify-center p-1.5 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 transition-colors" title="Hiện/Ẩn số liệu">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                 </button>
 
@@ -276,36 +275,62 @@ export async function onShowProductView(params = null) {
                 </div>
             </div>
 
-            <!-- Stats Panel (Top) -->
-            <div id="prod-stats-panel" class="bg-blue-50 dark:bg-gray-800 border-b dark:border-gray-700 px-4 py-2 text-xs overflow-x-auto select-none transition-all duration-300 hidden md:block">
+            <!-- Stats Panel (Mobile - Top - Hidden by Default) -->
+            <div id="prod-stats-mobile" class="md:hidden hidden bg-blue-50 dark:bg-gray-800 border-b dark:border-gray-700 px-4 py-2 text-xs overflow-x-auto select-none transition-all duration-300">
                 <div class="flex flex-row items-center gap-4 min-w-max">
                     <div class="flex items-center gap-2 whitespace-nowrap">
                         <span class="text-gray-500" data-i18n="txt_rows">Dòng:</span>
-                        <span id="prod-row-count" class="text-gray-800 dark:text-gray-100 font-bold">0</span>
+                        <span id="mob-prod-row-count" class="text-gray-800 dark:text-gray-100 font-bold">0</span>
                     </div>
                     <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
                     <div class="flex items-center gap-1 whitespace-nowrap" title="Số lượng sản phẩm Waiting">
                         <span class="text-blue-500" data-i18n="prod_waiting">Waiting:</span>
-                        <span id="prod-stats-waiting" class="font-bold text-blue-600 dark:text-blue-400">0</span>
+                        <span id="mob-prod-waiting" class="font-bold text-blue-600 dark:text-blue-400">0</span>
                     </div>
                     <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
                     <div class="flex items-center gap-1 whitespace-nowrap" title="Số lượng sản phẩm Win">
                         <span class="text-green-500" data-i18n="prod_win">Win:</span>
-                        <span id="prod-stats-win" class="font-bold text-green-600 dark:text-green-400">0</span>
+                        <span id="mob-prod-win" class="font-bold text-green-600 dark:text-green-400">0</span>
                     </div>
                     <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
                     <div class="flex items-center gap-1 whitespace-nowrap" title="Số lượng sản phẩm Fail">
                         <span class="text-red-500" data-i18n="prod_fail">Fail:</span>
-                        <span id="prod-stats-fail" class="font-bold text-red-600 dark:text-red-400">0</span>
+                        <span id="mob-prod-fail" class="font-bold text-red-600 dark:text-red-400">0</span>
                     </div>
-                    
-                    <!-- Selection Stats injected here -->
-                    <div id="prod-selection-stats" class="flex items-center gap-3 text-gray-500 dark:text-gray-400 border-l dark:border-gray-600 border-gray-300 ml-2 pl-4"></div>
                 </div>
             </div>
 
             <!-- Grid Container -->
             <div id="hot-product-container" class="flex-1 w-full overflow-hidden filters-hidden"></div>
+
+            <!-- Bottom Footer Bar (Desktop Only) -->
+            <div id="prod-footer-desktop" class="hidden md:flex bg-white dark:bg-gray-800 border-t dark:border-gray-700 items-center justify-between px-4 py-1 text-xs select-none shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-[200]">
+                <!-- Desktop Stats -->
+                <div class="flex flex-1 items-center gap-4">
+                    <div class="flex items-center gap-2 whitespace-nowrap">
+                        <span class="text-gray-500" data-i18n="txt_rows">Dòng:</span>
+                        <span id="desk-prod-row-count" class="text-gray-800 dark:text-gray-100 font-bold">0</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
+                    <div class="flex items-center gap-1 whitespace-nowrap">
+                        <span class="text-blue-500" data-i18n="prod_waiting">Waiting:</span>
+                        <span id="desk-prod-waiting" class="font-bold text-blue-600 dark:text-blue-400">0</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
+                    <div class="flex items-center gap-1 whitespace-nowrap">
+                        <span class="text-green-500" data-i18n="prod_win">Win:</span>
+                        <span id="desk-prod-win" class="font-bold text-green-600 dark:text-green-400">0</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
+                    <div class="flex items-center gap-1 whitespace-nowrap">
+                        <span class="text-red-500" data-i18n="prod_fail">Fail:</span>
+                        <span id="desk-prod-fail" class="font-bold text-red-600 dark:text-red-400">0</span>
+                    </div>
+                </div>
+
+                <!-- Right Side: Selection Stats (Desktop) -->
+                <div id="prod-selection-stats" class="flex items-center justify-end gap-3 text-gray-500 dark:text-gray-400 pl-4 border-l border-gray-300 dark:border-gray-600"></div>
+            </div>
         </div>
         
         <!-- Add Product Modal -->
@@ -1102,14 +1127,22 @@ function calculateHotTotals() {
     const fmt = (n) => n.toLocaleString('vi-VN');
     const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = fmt(val); };
 
-    // Update Stats in Top Panel
-    setVal('prod-stats-waiting', totalWaiting);
-    setVal('prod-stats-win', totalWin);
-    setVal('prod-stats-fail', totalFail);
+    // Update Mobile Stats
+    setVal('mob-prod-waiting', totalWaiting);
+    setVal('mob-prod-win', totalWin);
+    setVal('mob-prod-fail', totalFail);
+    
+    // Update Desktop Stats
+    setVal('desk-prod-waiting', totalWaiting);
+    setVal('desk-prod-win', totalWin);
+    setVal('desk-prod-fail', totalFail);
     
     // Update Row Count
-    const rowCountEl = document.getElementById('prod-row-count');
-    if (rowCountEl) rowCountEl.textContent = displayedData.length;
+    const rowCount = displayedData.length;
+    const mobRowCount = document.getElementById('mob-prod-row-count');
+    const deskRowCount = document.getElementById('desk-prod-row-count');
+    if (mobRowCount) mobRowCount.textContent = rowCount;
+    if (deskRowCount) deskRowCount.textContent = rowCount;
 }
 
 function calculateSelectionStats(r1, c1, r2, c2) {
@@ -1198,11 +1231,11 @@ function setupToolbarListeners() {
         else { container.classList.toggle('filters-hidden'); updateFilterButtonState(); }
     };
 
-    // Toggle Stats Button
+    // Toggle Stats Button (Mobile Only)
     const statsBtn = document.getElementById('btn-toggle-prod-stats');
     if(statsBtn) {
         statsBtn.onclick = () => {
-            const panel = document.getElementById('prod-stats-panel');
+            const panel = document.getElementById('prod-stats-mobile');
             if(panel) {
                 panel.classList.toggle('hidden');
                 // Refresh Handsontable dimensions as container size changes
