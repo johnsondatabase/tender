@@ -7,8 +7,7 @@ import { translations, getCurrentLanguage, setLanguage } from './lang.js';
 let hot; // Handsontable instance
 let allData = []; // Full dataset from DB
 let displayedData = []; // Filtered dataset
-let currentPage = 1;
-let rowsPerPage = 50;
+// Pagination Removed
 let productRealtimeChannel = null;
 let isProductLoaded = false; // Caching flag
 let currentManagingProduct = null; // Stores data of product currently being edited in image modal
@@ -16,7 +15,7 @@ let addProductFiles = []; // Staging array for Add Product Form files
 let savedSearchKeyword = ''; // Persistence
 
 // User Preferences Key
-const getStorageKey = () => `crm_user_settings_${currentUser ? currentUser.gmail : 'guest'}_product_view_v3`;
+const getStorageKey = () => `crm_user_settings_${currentUser ? currentUser.gmail : 'guest'}_product_view_v4`;
 
 // Helper Translation
 const t = (key) => {
@@ -220,6 +219,11 @@ export async function onShowProductView(params = null) {
                 </div>
                 <div class="h-6 w-px bg-gray-300 dark:bg-gray-600 mx-1 hidden md:block"></div>
                 
+                <!-- Eye Toggle (Show/Hide Stats) -->
+                <button id="btn-toggle-prod-stats" class="flex items-center justify-center p-1.5 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 transition-colors" title="Hiện/Ẩn số liệu">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                </button>
+
                 <!-- Filter Toggle -->
                 <button id="btn-toggle-prod-filter" class="flex items-center gap-1 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-xs font-medium text-gray-700 dark:text-gray-200 transition-colors">
                     <!-- Icon injected via JS -->
@@ -272,26 +276,36 @@ export async function onShowProductView(params = null) {
                 </div>
             </div>
 
-            <!-- Grid Container -->
-            <div id="hot-product-container" class="flex-1 w-full overflow-hidden filters-hidden"></div>
-
-            <!-- Bottom Footer Bar -->
-            <div id="product-footer" class="h-10 bg-white dark:bg-gray-800 border-t dark:border-gray-700 flex items-center justify-between px-4 text-xs select-none shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-[200]">
-                <div class="flex items-center gap-4 text-gray-600 dark:text-gray-300 font-medium">
-                    <div class="flex items-center gap-1"><span class="text-gray-400">Waiting:</span><span id="prod-footer-waiting" class="text-blue-600 dark:text-blue-400 font-bold">0</span></div>
+            <!-- Stats Panel (Top) -->
+            <div id="prod-stats-panel" class="bg-blue-50 dark:bg-gray-800 border-b dark:border-gray-700 px-4 py-2 text-xs overflow-x-auto select-none transition-all duration-300 hidden md:block">
+                <div class="flex flex-row items-center gap-4 min-w-max">
+                    <div class="flex items-center gap-2 whitespace-nowrap">
+                        <span class="text-gray-500" data-i18n="txt_rows">Dòng:</span>
+                        <span id="prod-row-count" class="text-gray-800 dark:text-gray-100 font-bold">0</span>
+                    </div>
                     <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
-                    <div class="flex items-center gap-1"><span class="text-gray-400">Win:</span><span id="prod-footer-win" class="text-green-600 dark:text-green-400 font-bold">0</span></div>
+                    <div class="flex items-center gap-1 whitespace-nowrap" title="Số lượng sản phẩm Waiting">
+                        <span class="text-blue-500" data-i18n="prod_waiting">Waiting:</span>
+                        <span id="prod-stats-waiting" class="font-bold text-blue-600 dark:text-blue-400">0</span>
+                    </div>
                     <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
-                    <div class="flex items-center gap-1"><span class="text-gray-400">Fail:</span><span id="prod-footer-fail" class="text-red-600 dark:text-red-400 font-bold">0</span></div>
-                </div>
-                <div id="prod-selection-stats" class="hidden md:flex items-center gap-4 text-gray-500 dark:text-gray-400"></div>
-                <div class="flex items-center gap-2">
-                    <select id="prod-rows-per-page" class="hidden sm:block bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded text-xs px-1 py-0.5 outline-none focus:ring-1 focus:ring-blue-500"><option value="50">50</option><option value="100">100</option><option value="200">200</option><option value="-1">Tất cả</option></select>
-                    <span id="prod-footer-pagination-text" class="text-gray-500 dark:text-gray-400 hidden sm:inline">0-0 trên 0</span>
-                    <span id="prod-footer-page-number" class="hidden sm:inline text-gray-700 dark:text-gray-200 font-medium ml-1">Trang 1/1</span>
-                    <div class="flex items-center border border-gray-200 dark:border-gray-600 rounded overflow-hidden ml-1"><button id="btn-prod-prev-page" class="px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent border-r dark:border-gray-600 transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg></button><button id="btn-prod-next-page" class="px-3 py-1 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-30 disabled:hover:bg-transparent transition-colors"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></button></div>
+                    <div class="flex items-center gap-1 whitespace-nowrap" title="Số lượng sản phẩm Win">
+                        <span class="text-green-500" data-i18n="prod_win">Win:</span>
+                        <span id="prod-stats-win" class="font-bold text-green-600 dark:text-green-400">0</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
+                    <div class="flex items-center gap-1 whitespace-nowrap" title="Số lượng sản phẩm Fail">
+                        <span class="text-red-500" data-i18n="prod_fail">Fail:</span>
+                        <span id="prod-stats-fail" class="font-bold text-red-600 dark:text-red-400">0</span>
+                    </div>
+                    
+                    <!-- Selection Stats injected here -->
+                    <div id="prod-selection-stats" class="flex items-center gap-3 text-gray-500 dark:text-gray-400 border-l dark:border-gray-600 border-gray-300 ml-2 pl-4"></div>
                 </div>
             </div>
+
+            <!-- Grid Container -->
+            <div id="hot-product-container" class="flex-1 w-full overflow-hidden filters-hidden"></div>
         </div>
         
         <!-- Add Product Modal -->
@@ -371,15 +385,12 @@ export async function onShowProductView(params = null) {
     loadUserSettings();
 
     // --- Initial Setup ---
-    
-    // Add Global Keydown Listener for ESC (once per view load is fine if handled correctly)
     document.removeEventListener('keydown', handleProductEscKey);
     document.addEventListener('keydown', handleProductEscKey);
 
     const initCore = async (silent) => {
         await fetchProductData(silent);
         
-        // Restore search keyword if provided
         if (savedSearchKeyword) {
             const searchInput = document.getElementById('product-search');
             if (searchInput) searchInput.value = savedSearchKeyword;
@@ -387,7 +398,7 @@ export async function onShowProductView(params = null) {
         }
 
         initHandsontable();
-        updateTableData();
+        updateTableData(); // Loads ALL data (No pagination)
         setupToolbarListeners();
         setupExportListeners();
         setupImageModalListeners(); 
@@ -413,7 +424,7 @@ export async function onShowProductView(params = null) {
     }
 }
 
-// --- Add Product Form Logic (Enhanced) ---
+// ... (Add Product & Image Logic UNCHANGED) ...
 
 function setupAddProductFormListeners() {
     const addForm = document.getElementById('add-product-form');
@@ -553,8 +564,6 @@ function renderAddProductPreviews() {
     });
 }
 
-// --- Image Modal Logic ---
-
 function setupImageModalListeners() {
     const modal = document.getElementById('image-management-modal');
     const closeBtn = document.getElementById('close-img-modal-btn');
@@ -592,7 +601,6 @@ function setupImageModalListeners() {
 }
 
 function openImageManager(rowData) {
-    // Check permission first
     if (!checkPermission('sua') && !checkPermission('xem')) return;
     
     currentManagingProduct = rowData;
@@ -663,7 +671,6 @@ function renderImageGrid() {
         container.appendChild(wrapper);
     });
 
-    // Initialize Sortable for Reordering if user has Edit permission
     if (canEdit) {
         new Sortable(container, {
             animation: 150,
@@ -673,23 +680,20 @@ function renderImageGrid() {
             onEnd: async (evt) => {
                 if (evt.oldIndex === evt.newIndex) return;
                 
-                // Reorder array locally
                 const movedItem = images.splice(evt.oldIndex, 1)[0];
                 images.splice(evt.newIndex, 0, movedItem);
                 
-                // Update DB
                 showLoading(true);
                 const { error } = await sb.from('product').update({ url_hinh_anh: JSON.stringify(images) }).eq('ma_vt', currentManagingProduct.ma_vt);
                 showLoading(false);
                 
                 if (error) {
                     showToast("Lỗi cập nhật vị trí: " + error.message, 'error');
-                    renderImageGrid(); // Revert visual
+                    renderImageGrid();
                 } else {
                     currentManagingProduct.url_hinh_anh = JSON.stringify(images);
-                    // Refresh whole grid to update index badges
                     renderImageGrid(); 
-                    fetchProductData(true); // Silent refresh main table
+                    fetchProductData(true); 
                 }
             }
         });
@@ -729,15 +733,13 @@ async function uploadImages(fileList) {
 
         const combined = [...existingImages, ...newUrls];
         
-        // Use proper upsert or update depending on your logic, here update is safe since we have ma_vt
         const { error } = await sb.from('product').update({ url_hinh_anh: JSON.stringify(combined) }).eq('ma_vt', currentManagingProduct.ma_vt);
         
         if (error) {
             showToast("Lỗi cập nhật: " + error.message, 'error');
         } else {
-            currentManagingProduct.url_hinh_anh = JSON.stringify(combined); // Update local ref
+            currentManagingProduct.url_hinh_anh = JSON.stringify(combined); 
             renderImageGrid();
-            // Refresh grid silently to show new count badge
             fetchProductData(true);
         }
     }
@@ -802,14 +804,12 @@ async function downloadAllImages() {
                 const response = await fetch(url);
                 const blob = await response.blob();
                 
-                // Determine extension
                 let ext = 'jpg';
                 const type = blob.type;
                 if (type === 'image/png') ext = 'png';
                 else if (type === 'image/jpeg') ext = 'jpg';
                 else if (type === 'image/webp') ext = 'webp';
                 
-                // Naming convention: hinh_anh_[ma_vt]_[index].[ext]
                 const filename = `hinh_anh_${currentManagingProduct.ma_vt}_${i + 1}.${ext}`;
                 zip.file(filename, blob);
             } catch(e) { console.error("Fetch error", e); }
@@ -833,8 +833,6 @@ async function downloadAllImages() {
     }
 }
 
-// ... (Rest of the existing functions: fetchProductData, loadUserSettings, saveUserSettings, etc. UNCHANGED until initHandsontable) ...
-
 async function fetchProductData(silent = false) {
     if(!silent) showLoading(true);
     const { data, error } = await sb.from('product_total').select('*').order('ma_vt', { ascending: true });
@@ -848,7 +846,6 @@ async function fetchProductData(silent = false) {
     allData = (data || []).map(item => ({ ...item, selected: false }));
     isProductLoaded = true;
 
-    // Apply Filter if keyword exists
     if(savedSearchKeyword) filterData(savedSearchKeyword);
     else displayedData = [...allData];
     
@@ -970,13 +967,16 @@ function initHandsontable() {
                 saveUserSettings();
             }
         },
-        afterFilter: () => { updateFilterButtonState(); },
+        afterFilter: () => { 
+            updateFilterButtonState(); 
+            calculateHotTotals(); // Recalculate stats on filter
+        },
         afterColumnSort: () => { saveUserSettings(); },
         afterSetCellMeta: (row, col, key, val) => { if (key === 'className') saveUserSettings(); },
         afterSelectionEnd: (row, col, row2, col2) => { calculateSelectionStats(row, col, row2, col2); },
         afterDeselect: () => { document.getElementById('prod-selection-stats').innerHTML = ''; },
         afterOnCellDblClick: async (event, coords, td) => {
-            if (coords.row < 0 || coords.col < 0) return; // Header click
+            if (coords.row < 0 || coords.col < 0) return; 
             
             const rowData = hot.getSourceDataAtRow(hot.toPhysicalRow(coords.row));
             const colProp = hot.colToProp(coords.col);
@@ -1000,7 +1000,7 @@ function initHandsontable() {
                     hasSelectionChange = true;
                     continue; 
                 }
-                if(['ma_vt','waiting','win','fail','url_hinh_anh'].includes(prop)) continue; // Skip readonly
+                if(['ma_vt','waiting','win','fail','url_hinh_anh'].includes(prop)) continue; 
 
                 const maVt = rowData.ma_vt;
                 if (!maVt) continue;
@@ -1037,8 +1037,6 @@ function initHandsontable() {
     });
 }
 
-// ... (Rest of file: updateBulkDeleteButton, deleteSelectedProducts, updateTableData, updateFooterInfo, calculateSelectionStats, filterData, updateFilterButtonState, setupToolbarListeners, populateAutocompletes, setupSingleAutocomplete, downloadProductTemplate, handleProductImport, setupExportListeners, exportToExcel - UNCHANGED) ...
-
 function updateBulkDeleteButton() {
     const btn = document.getElementById('btn-delete-selected');
     if (!btn) return;
@@ -1065,54 +1063,53 @@ async function deleteSelectedProducts() {
     }
 }
 
+// Updated Table Data Logic: No Pagination
 function updateTableData() {
     if (!hot) return;
-    let pageData = [];
-    let totalPages = 1;
-    if (rowsPerPage === -1) {
-        pageData = displayedData;
-        currentPage = 1;
-        totalPages = 1;
-    } else {
-        totalPages = Math.ceil(displayedData.length / rowsPerPage) || 1;
-        if (currentPage > totalPages) currentPage = totalPages;
-        if (currentPage < 1) currentPage = 1;
-        const start = (currentPage - 1) * rowsPerPage;
-        const end = start + rowsPerPage;
-        pageData = displayedData.slice(start, end);
-    }
-    hot.loadData(pageData);
-    const startIdx = rowsPerPage === -1 ? 1 : ((currentPage - 1) * rowsPerPage) + 1;
-    const endIdx = rowsPerPage === -1 ? displayedData.length : Math.min(startIdx + rowsPerPage - 1, displayedData.length);
-    updateFooterInfo(startIdx, endIdx, displayedData.length, totalPages);
-    const btnPrev = document.getElementById('btn-prod-prev-page');
-    const btnNext = document.getElementById('btn-prod-next-page');
-    if(btnPrev) btnPrev.disabled = currentPage === 1;
-    if(btnNext) btnNext.disabled = currentPage === totalPages;
+    
+    // Load ALL displayed data (no slicing)
+    hot.loadData(displayedData);
+    
+    // Update Stats
+    calculateHotTotals();
+    
     updateFilterButtonState();
     updateBulkDeleteButton();
     setTimeout(() => hot.render(), 100); 
 }
 
-function updateFooterInfo(start, end, total, totalPages) {
-    const pagText = document.getElementById('prod-footer-pagination-text');
-    const pageNumText = document.getElementById('prod-footer-page-number');
-    if (pagText) {
-        if (total === 0) pagText.textContent = "0 dòng";
-        else pagText.textContent = `${start}-${end} trên ${total}`;
-    }
-    if (pageNumText) pageNumText.textContent = `Trang ${currentPage}/${totalPages}`;
-    let sumWait = 0, sumWin = 0, sumFail = 0;
-    for(let i = 0; i < displayedData.length; i++) {
-        const item = displayedData[i];
-        if (item.waiting) sumWait += Number(item.waiting) || 0;
-        if (item.win) sumWin += Number(item.win) || 0;
-        if (item.fail) sumFail += Number(item.fail) || 0;
-    }
+// Renamed & Updated Function: Calculate Totals based on VISIBLE (Filtered) Rows
+function calculateHotTotals() {
+    if (!hot) return;
+
+    const visibleData = hot.getData();
+    const waitingIdx = hot.propToCol('waiting');
+    const winIdx = hot.propToCol('win');
+    const failIdx = hot.propToCol('fail');
+
+    let totalWaiting = 0;
+    let totalWin = 0;
+    let totalFail = 0;
+
+    visibleData.forEach(row => {
+        if (row) {
+            totalWaiting += (waitingIdx !== null) ? (parseFloat(row[waitingIdx]) || 0) : 0;
+            totalWin += (winIdx !== null) ? (parseFloat(row[winIdx]) || 0) : 0;
+            totalFail += (failIdx !== null) ? (parseFloat(row[failIdx]) || 0) : 0;
+        }
+    });
+
     const fmt = (n) => n.toLocaleString('vi-VN');
-    document.getElementById('prod-footer-waiting').textContent = fmt(sumWait);
-    document.getElementById('prod-footer-win').textContent = fmt(sumWin);
-    document.getElementById('prod-footer-fail').textContent = fmt(sumFail);
+    const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = fmt(val); };
+
+    // Update Stats in Top Panel
+    setVal('prod-stats-waiting', totalWaiting);
+    setVal('prod-stats-win', totalWin);
+    setVal('prod-stats-fail', totalFail);
+    
+    // Update Row Count
+    const rowCountEl = document.getElementById('prod-row-count');
+    if (rowCountEl) rowCountEl.textContent = displayedData.length;
 }
 
 function calculateSelectionStats(r1, c1, r2, c2) {
@@ -1150,7 +1147,7 @@ function calculateSelectionStats(r1, c1, r2, c2) {
 }
 
 function filterData(keyword) {
-    savedSearchKeyword = keyword; // Persist state
+    savedSearchKeyword = keyword; 
     if (!keyword || keyword.trim() === '') {
         displayedData = [...allData];
     } else {
@@ -1159,7 +1156,7 @@ function filterData(keyword) {
             return Object.values(item).some(val => String(val).toLowerCase().includes(lower));
         });
     }
-    currentPage = 1;
+    // No paging reset needed
     updateTableData();
 }
 
@@ -1188,16 +1185,6 @@ function updateFilterButtonState() {
 }
 
 function setupToolbarListeners() {
-    const btnPrev = document.getElementById('btn-prod-prev-page');
-    const btnNext = document.getElementById('btn-prod-next-page');
-    const selectRows = document.getElementById('prod-rows-per-page');
-    if(selectRows) {
-        selectRows.value = rowsPerPage;
-        selectRows.onchange = (e) => { rowsPerPage = parseInt(e.target.value); currentPage = 1; updateTableData(); };
-    }
-    if(btnPrev) btnPrev.onclick = () => { if (currentPage > 1) { currentPage--; updateTableData(); } };
-    if(btnNext) btnNext.onclick = () => { const totalPages = rowsPerPage === -1 ? 1 : Math.ceil(displayedData.length / rowsPerPage); if (currentPage < totalPages) { currentPage++; updateTableData(); } };
-
     const searchInput = document.getElementById('product-search');
     if(searchInput) searchInput.addEventListener('input', (e) => { filterData(e.target.value); });
 
@@ -1210,6 +1197,19 @@ function setupToolbarListeners() {
         if (hasConditions) { plugin.clearConditions(); plugin.filter(); hot.render(); } 
         else { container.classList.toggle('filters-hidden'); updateFilterButtonState(); }
     };
+
+    // Toggle Stats Button
+    const statsBtn = document.getElementById('btn-toggle-prod-stats');
+    if(statsBtn) {
+        statsBtn.onclick = () => {
+            const panel = document.getElementById('prod-stats-panel');
+            if(panel) {
+                panel.classList.toggle('hidden');
+                // Refresh Handsontable dimensions as container size changes
+                if(hot) setTimeout(() => hot.refreshDimensions(), 100);
+            }
+        };
+    }
 
     const btnBulkDelete = document.getElementById('btn-delete-selected');
     if (btnBulkDelete) btnBulkDelete.onclick = deleteSelectedProducts;
@@ -1252,9 +1252,6 @@ function setupToolbarListeners() {
     const closeAddModal = () => addModal.classList.add('hidden');
     if (closeAddBtn) closeAddBtn.onclick = closeAddModal;
     if (cancelAddBtn) cancelAddBtn.onclick = closeAddModal;
-
-    // Original addForm logic replaced by setupAddProductFormListeners() call inside initCore
-    // Keeping this block for reference but logic moved to dedicated function below
 
     const colBtn = document.getElementById('btn-prod-col-settings');
     if (colBtn) {
