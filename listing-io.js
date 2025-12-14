@@ -1,4 +1,6 @@
 
+
+
 import { sb, showToast, showLoading, showConfirm, currentUser } from './app.js';
 
 // Removed import { notifyAdmins, fetchListings } from './listing.js' to fix circular dependency.
@@ -6,14 +8,14 @@ import { sb, showToast, showLoading, showConfirm, currentUser } from './app.js';
 
 export function downloadImportTemplate() {
     const headers = [
-        'Năm', 'Bệnh Viện', 'Tỉnh', 'Khu Vực', 'Nhà Phân Phối', 'Ngày', 'Loại', 
+        'Năm', 'Bệnh Viện', 'Khoa', 'Tỉnh', 'Khu Vực', 'Nhà Phân Phối', 'Ngày', 'Loại', 
         'Mã VT', 'Quota', 'SL Trúng', 'Tình Trạng', 'Ngày Ký', 'Ngày Kết Thúc', 
         'Ngành', 'PSR', 'Quản Lý', 'Nhóm Sản Phẩm'
     ];
     const exampleData = [
-        [2024, 'BV Chợ Rẫy', 'Hồ Chí Minh', 'HCM', 'Công ty A', '2024-01-15', 'Thầu tập trung', 'VT-001', 1000, 0, 'Waiting', '', '', 'Tim mạch', 'Nguyen Van A', 'Tran Van B', 'G1'],
-        [2024, 'BV Chợ Rẫy', 'Hồ Chí Minh', 'HCM', 'Công ty A', '2024-01-15', 'Thầu tập trung', 'VT-002', 500, 0, 'Waiting', '', '', 'Tim mạch', 'Nguyen Van A', 'Tran Van B', 'G2'],
-        [2024, 'BV Bạch Mai', 'Hà Nội', 'Hà Nội', 'Công ty B', '2024-02-01', 'Mua sắm trực tiếp', 'VT-003', 200, 0, 'Waiting', '', '', 'Hô hấp', 'Le Van C', 'Pham Van D', 'G1']
+        [2024, 'BV Chợ Rẫy', 'Khoa Dược', 'Hồ Chí Minh', 'HCM', 'Công ty A', '2024-01-15', 'Thầu tập trung', 'VT-001', 1000, 0, 'Waiting', '', '', 'Tim mạch', 'Nguyen Van A', 'Tran Van B', 'G1'],
+        [2024, 'BV Chợ Rẫy', '', 'Hồ Chí Minh', 'HCM', 'Công ty A', '2024-01-15', 'Thầu tập trung', 'VT-002', 500, 0, 'Waiting', '', '', 'Tim mạch', 'Nguyen Van A', 'Tran Van B', 'G2'],
+        [2024, 'BV Bạch Mai', 'Hồi sức tích cực', 'Hà Nội', 'Hà Nội', 'Công ty B', '2024-02-01', 'Mua sắm trực tiếp', 'VT-003', 200, 0, 'Waiting', '', '', 'Hô hấp', 'Le Van C', 'Pham Van D', 'G1']
     ];
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...exampleData]);
@@ -54,7 +56,7 @@ async function processImportData(data) {
     }
 
     const keyMap = {
-        'Năm': 'nam', 'Bệnh Viện': 'benh_vien', 'Tỉnh': 'tinh', 'Khu Vực': 'khu_vuc', 
+        'Năm': 'nam', 'Bệnh Viện': 'benh_vien', 'Khoa': 'khoa', 'Tỉnh': 'tinh', 'Khu Vực': 'khu_vuc', 
         'Nhà Phân Phối': 'nha_phan_phoi', 'Ngày': 'ngay', 'Loại': 'loai', 
         'Mã VT': 'ma_vt', 'Quota': 'quota', 'SL Trúng': 'sl_trung', 'Tình Trạng': 'tinh_trang', 
         'Ngày Ký': 'ngay_ky', 'Ngày Kết Thúc': 'ngay_ket_thuc', 
@@ -95,6 +97,7 @@ async function processImportData(data) {
                 common: {
                     nam: normalizedRow.nam || new Date().getFullYear(),
                     benh_vien: benh_vien,
+                    khoa: normalizedRow.khoa || '',
                     tinh: normalizedRow.tinh || '',
                     khu_vuc: normalizedRow.khu_vuc || '',
                     nha_phan_phoi: normalizedRow.nha_phan_phoi || '',

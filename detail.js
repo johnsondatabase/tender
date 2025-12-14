@@ -1,4 +1,8 @@
 
+
+
+
+
 import { sb, showToast, showLoading, currentUser } from './app.js';
 import { translations, getCurrentLanguage, setLanguage } from './lang.js';
 
@@ -19,24 +23,41 @@ const t = (key) => {
     return translations[lang][key] || key;
 };
 
+// --- Custom Renderers ---
+
+function dateRenderer(instance, td, row, col, prop, value, cellProperties) {
+    Handsontable.renderers.TextRenderer.apply(this, arguments);
+    if (value) {
+        // Try to parse YYYY-MM-DD
+        const date = new Date(value);
+        if (!isNaN(date.getTime())) {
+            const day = String(date.getDate()).padStart(2, '0');
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const year = date.getFullYear();
+            td.innerHTML = `${day}/${month}/${year}`;
+        }
+    }
+    td.className = 'htCenter'; // Center align dates
+}
+
 // Base Column Definitions
-// Changed date columns to type: 'text' to prevent dropdown arrow rendering in read-only mode
 const BASE_COLUMNS = [
     { data: 'id', type: 'numeric', defaultHidden: true, readOnly: true }, // 0. Hidden ID
     { data: 'ma_thau', type: 'text', titleKey: 'dt_ma_thau', width: 120 },
     { data: 'nam', type: 'numeric', titleKey: 'dt_nam', width: 60 },
     { data: 'benh_vien', type: 'text', titleKey: 'dt_benh_vien', width: 150 },
+    { data: 'khoa', type: 'text', titleKey: 'dt_department', width: 120 },
     { data: 'tinh', type: 'text', titleKey: 'dt_tinh', width: 100 },
     { data: 'khu_vuc', type: 'text', titleKey: 'dt_khu_vuc', width: 80 },
     { data: 'nha_phan_phoi', type: 'text', titleKey: 'dt_npp', width: 150 },
-    { data: 'ngay', type: 'text', titleKey: 'dt_ngay', width: 90 }, // Type text to remove arrow
+    { data: 'ngay', type: 'text', titleKey: 'dt_ngay', width: 90, renderer: dateRenderer }, // Custom Format
     { data: 'loai', type: 'text', titleKey: 'dt_loai', width: 80 },
     { data: 'ma_vt', type: 'text', titleKey: 'dt_ma_vt', width: 100 },
     { data: 'quota', type: 'numeric', titleKey: 'dt_quota', width: 80 },
     { data: 'tinh_trang', type: 'text', titleKey: 'dt_tinh_trang', width: 100 },
     { data: 'sl_trung', type: 'numeric', titleKey: 'dt_sl_trung', width: 80 },
-    { data: 'ngay_ky', type: 'text', titleKey: 'dt_ngay_ky', width: 90 }, // Type text to remove arrow
-    { data: 'ngay_ket_thuc', type: 'text', titleKey: 'dt_ngay_kt', width: 90 }, // Type text to remove arrow
+    { data: 'ngay_ky', type: 'text', titleKey: 'dt_ngay_ky', width: 90, renderer: dateRenderer }, // Custom Format
+    { data: 'ngay_ket_thuc', type: 'text', titleKey: 'dt_ngay_kt', width: 90, renderer: dateRenderer }, // Custom Format
     { data: 'nganh', type: 'text', titleKey: 'dt_nganh', width: 100 },
     { data: 'psr', type: 'text', titleKey: 'dt_psr', width: 80 }, 
     { data: 'quan_ly', type: 'text', titleKey: 'dt_quan_ly', width: 120 },
@@ -64,7 +85,9 @@ export async function onShowDetailView() {
     const canExport = exportPermissions.includes('view-chi-tiet');
 
     // Inject Structure
-    // UPDATED LAYOUT: Footer allows horizontal scrolling for stats on mobile (single row)
+    // HYBRID LAYOUT: 
+    // - Mobile: Stats on top (toggleable), Footer simple.
+    // - Desktop: Stats on bottom (Footer), No toggle on top.
     container.innerHTML = `
         <div class="flex flex-col h-full relative">
             <!-- Toolbar -->
@@ -80,7 +103,12 @@ export async function onShowDetailView() {
 
                 <div class="h-6 w-px bg-gray-300 dark:bg-gray-600 mx-1 hidden md:block"></div>
                 
-                <!-- Header Filters Toggle (3-State Button) -->
+                <!-- Stats Toggle (Eye Icon) - MOBILE ONLY (md:hidden) -->
+                <button id="btn-toggle-stats" class="md:hidden flex items-center justify-center p-1.5 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 transition-colors" title="Hiện/Ẩn số liệu">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                </button>
+
+                <!-- Header Filters Toggle -->
                 <button id="btn-toggle-header-filter" class="flex items-center gap-1 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-xs font-medium text-gray-700 dark:text-gray-200 transition-colors">
                     <!-- Icon & Text injected via JS -->
                 </button>
@@ -90,7 +118,7 @@ export async function onShowDetailView() {
                     <span data-i18n="btn_col_manager">Quản lý cột</span>
                 </button>
 
-                <!-- Export Button with Dropdown -->
+                <!-- Export Button -->
                 <div class="relative ${canExport ? '' : 'hidden'}">
                     <button id="btn-export-excel" class="ml-2 flex items-center gap-1 px-2 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50 rounded text-xs font-medium transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
@@ -110,50 +138,96 @@ export async function onShowDetailView() {
                 </div>
             </div>
 
+            <!-- Stats Panel (Top) - MOBILE ONLY -->
+            <div id="stats-panel-mobile" class="md:hidden bg-blue-50 dark:bg-gray-800 border-b dark:border-gray-700 px-4 py-2 text-xs overflow-x-auto select-none transition-all duration-300 hidden">
+                <div class="flex flex-row items-center gap-4 min-w-max">
+                    <div class="flex items-center gap-1 whitespace-nowrap">
+                        <span class="text-gray-500" data-i18n="dt_stat_quota">Quota:</span>
+                        <span id="mob-total-quota" class="text-gray-800 dark:text-gray-100 font-bold">0</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
+                    <div class="flex items-center gap-1 whitespace-nowrap" title="Quota có trạng thái Listing">
+                        <span class="text-gray-500" data-i18n="dt_stat_listing">Listing:</span>
+                        <span id="mob-listing-val" class="font-bold text-gray-600 dark:text-gray-300">0</span>
+                        <span id="mob-listing-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
+                    <div class="flex items-center gap-1 whitespace-nowrap" title="Quota có trạng thái Waiting">
+                        <span class="text-blue-500" data-i18n="dt_stat_waiting">Waiting:</span>
+                        <span id="mob-waiting-val" class="font-bold text-blue-600 dark:text-blue-400">0</span>
+                        <span id="mob-waiting-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
+                    <div class="flex items-center gap-1 whitespace-nowrap" title="SL Trúng có trạng thái Win">
+                        <span class="text-green-500" data-i18n="dt_stat_win">Win (Trúng):</span>
+                        <span id="mob-win-val" class="font-bold text-green-600 dark:text-green-400">0</span>
+                        <span id="mob-win-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
+                    <div class="flex items-center gap-1 whitespace-nowrap" title="Quota có trạng thái Fail">
+                        <span class="text-red-500" data-i18n="dt_stat_fail">Fail:</span>
+                        <span id="mob-fail-val" class="font-bold text-red-600 dark:text-red-400">0</span>
+                        <span id="mob-fail-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
+                    <div class="flex items-center gap-1 whitespace-nowrap" title="Quota(Win) - SL Trúng(Win)">
+                        <span class="text-orange-500" data-i18n="dt_stat_partial">Thua 1 Phần:</span>
+                        <span id="mob-partial-val" class="font-bold text-orange-600 dark:text-orange-400">0</span>
+                        <span id="mob-partial-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
+                    </div>
+                </div>
+            </div>
+
             <!-- Grid Container -->
             <div id="hot-container" class="flex-1 w-full overflow-hidden filters-hidden"></div>
 
-            <!-- Bottom Footer Bar (UPDATED STRUCTURE for Mobile "One Row" Scrolling) -->
-            <div id="detail-footer" class="h-auto bg-white dark:bg-gray-800 border-t dark:border-gray-700 flex flex-col-reverse md:flex-row items-stretch md:items-center justify-between text-xs select-none shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-[200]">
+            <!-- Bottom Footer Bar -->
+            <div id="detail-footer" class="h-auto bg-white dark:bg-gray-800 border-t dark:border-gray-700 flex flex-col md:flex-row items-stretch md:items-center justify-between px-2 md:px-4 py-1 text-xs select-none shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-[200]">
                 
-                <!-- Detailed Filtered Stats (Scrollable One Row on Mobile) -->
-                <div class="flex-1 flex items-center overflow-x-auto no-scrollbar py-2 md:py-1 px-2 md:px-4 gap-4 bg-gray-50 md:bg-transparent dark:bg-gray-900/30 md:dark:bg-transparent border-t md:border-t-0 border-gray-100 dark:border-gray-700">
+                <!-- Desktop Stats (Hidden on Mobile) -->
+                <div class="hidden md:flex flex-1 items-center gap-4">
                     <div class="flex items-center gap-1 whitespace-nowrap flex-shrink-0">
                         <span class="text-gray-500" data-i18n="dt_stat_quota">Quota:</span>
-                        <span id="ft-total-quota" class="text-gray-800 dark:text-gray-100 font-bold">0</span>
+                        <span id="desk-total-quota" class="text-gray-800 dark:text-gray-100 font-bold">0</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-300 dark:bg-gray-600 flex-shrink-0"></div>
+                    <div class="flex items-center gap-1 whitespace-nowrap flex-shrink-0" title="Quota có trạng thái Listing">
+                        <span class="text-gray-500" data-i18n="dt_stat_listing">Listing:</span>
+                        <span id="desk-listing-val" class="font-bold text-gray-600 dark:text-gray-300">0</span>
+                        <span id="desk-listing-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
                     </div>
                     <div class="w-px h-3 bg-gray-300 dark:bg-gray-600 flex-shrink-0"></div>
                     <div class="flex items-center gap-1 whitespace-nowrap flex-shrink-0" title="Quota có trạng thái Waiting">
                         <span class="text-blue-500" data-i18n="dt_stat_waiting">Waiting:</span>
-                        <span id="ft-waiting-val" class="font-bold text-blue-600 dark:text-blue-400">0</span>
-                        <span id="ft-waiting-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
+                        <span id="desk-waiting-val" class="font-bold text-blue-600 dark:text-blue-400">0</span>
+                        <span id="desk-waiting-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
                     </div>
                     <div class="w-px h-3 bg-gray-300 dark:bg-gray-600 flex-shrink-0"></div>
                     <div class="flex items-center gap-1 whitespace-nowrap flex-shrink-0" title="SL Trúng có trạng thái Win">
                         <span class="text-green-500" data-i18n="dt_stat_win">Win (Trúng):</span>
-                        <span id="ft-win-val" class="font-bold text-green-600 dark:text-green-400">0</span>
-                        <span id="ft-win-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
+                        <span id="desk-win-val" class="font-bold text-green-600 dark:text-green-400">0</span>
+                        <span id="desk-win-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
                     </div>
                     <div class="w-px h-3 bg-gray-300 dark:bg-gray-600 flex-shrink-0"></div>
                     <div class="flex items-center gap-1 whitespace-nowrap flex-shrink-0" title="Quota có trạng thái Fail">
                         <span class="text-red-500" data-i18n="dt_stat_fail">Fail:</span>
-                        <span id="ft-fail-val" class="font-bold text-red-600 dark:text-red-400">0</span>
-                        <span id="ft-fail-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
+                        <span id="desk-fail-val" class="font-bold text-red-600 dark:text-red-400">0</span>
+                        <span id="desk-fail-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
                     </div>
                     <div class="w-px h-3 bg-gray-300 dark:bg-gray-600 flex-shrink-0"></div>
                     <div class="flex items-center gap-1 whitespace-nowrap flex-shrink-0" title="Quota(Win) - SL Trúng(Win)">
                         <span class="text-orange-500" data-i18n="dt_stat_partial">Thua 1 Phần:</span>
-                        <span id="ft-partial-val" class="font-bold text-orange-600 dark:text-orange-400">0</span>
-                        <span id="ft-partial-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
+                        <span id="desk-partial-val" class="font-bold text-orange-600 dark:text-orange-400">0</span>
+                        <span id="desk-partial-pct" class="text-[10px] text-gray-400 font-normal">(0%)</span>
                     </div>
                 </div>
 
-                <!-- Right Side: Selection Stats + Rows Info (Pagination Removed) -->
-                <div class="flex items-center justify-between md:justify-end gap-4 px-2 py-1 md:px-4">
-                    <!-- Selection Stats -->
-                    <div id="selection-stats" class="hidden xl:flex items-center gap-3 text-gray-500 dark:text-gray-400 pr-2 border-r dark:border-gray-600 border-gray-300"></div>
-
-                    <!-- Row Info (Virtual Scrolling) -->
+                <!-- Right Side: Selection Stats + Rows Info -->
+                <div class="flex items-center justify-between md:justify-end gap-4 flex-1 md:flex-none">
+                    <!-- Selection Stats (Hidden on mobile usually due to space, or styled differently) -->
+                    <div id="selection-stats" class="hidden xl:flex items-center gap-3 text-gray-500 dark:text-gray-400 pr-2 border-r dark:border-gray-600 border-gray-300 mr-2"></div>
+                    
+                    <!-- Row Info -->
                     <div class="flex items-center gap-2 ml-auto">
                         <span id="footer-row-count" class="text-gray-500 dark:text-gray-400 text-xs">Loading...</span>
                     </div>
@@ -161,7 +235,7 @@ export async function onShowDetailView() {
             </div>
         </div>
 
-        <!-- Date Filter Modal (Fully Translated) -->
+        <!-- Date Filter Modal -->
         <div id="date-filter-modal" class="hidden fixed inset-0 z-[12000] flex items-center justify-center modal-backdrop p-4">
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden transform transition-all">
                 <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700">
@@ -197,7 +271,7 @@ export async function onShowDetailView() {
     // Apply initial translations immediately
     setLanguage(getCurrentLanguage());
 
-    loadUserSettings(); // Load saved column widths/orders and sort config
+    loadUserSettings(); 
 
     // PERFORMANCE: If already loaded, init UI with cache, then silent fetch
     if(isDetailLoaded) {
@@ -206,36 +280,32 @@ export async function onShowDetailView() {
         setupToolbarListeners();
         setupColumnManager();
         setupExportListeners();
-        setupDateFilterModal(); // Init Date Filter Listeners
-        fetchDetailData(true); // Silent update
+        setupDateFilterModal(); 
+        fetchDetailData(true); 
         
-        // Re-observe
         const resizeObserver = new ResizeObserver(() => {
             if(hot) hot.refreshDimensions();
         });
         resizeObserver.observe(document.getElementById('hot-container'));
     } else {
-        await fetchDetailData(false); // Normal fetch with loader
+        await fetchDetailData(false); 
         
         initHandsontable();
         updateTableData();
         setupToolbarListeners();
         setupColumnManager();
         setupExportListeners();
-        setupDateFilterModal(); // Init Date Filter Listeners
+        setupDateFilterModal();
         
-        // Resize observer
         const resizeObserver = new ResizeObserver(() => {
             if(hot) hot.refreshDimensions();
         });
         resizeObserver.observe(document.getElementById('hot-container'));
     }
 
-    // Subscribe to Realtime
     if(!detailRealtimeChannel) {
         detailRealtimeChannel = sb.channel('public:detail_view_changes')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'detail' }, () => {
-                // Refresh data quietly
                 fetchDetailData(true);
             })
             .subscribe();
@@ -244,7 +314,40 @@ export async function onShowDetailView() {
 
 async function fetchDetailData(silent = false) {
     if(!silent) showLoading(true);
-    const { data, error } = await sb.from('detail').select('*').order('ngay', { ascending: false });
+    
+    let query = sb.from('detail').select('*').order('ngay', { ascending: false });
+
+    // --- PERMISSION CHECK: View Role Logic ---
+    // Chỉ xem được của chính mình (ho_ten) VÀ những người được cấp quyền (viewer column)
+    if (currentUser && currentUser.phan_quyen === 'View') {
+        const myName = currentUser.ho_ten;
+        let allowedPsrs = [myName]; // Luôn xem được của chính mình
+
+        // Lấy danh sách viewer được cấp quyền
+        try {
+            if (currentUser.viewer) {
+                const viewers = typeof currentUser.viewer === 'string' ? JSON.parse(currentUser.viewer) : currentUser.viewer;
+                if (Array.isArray(viewers)) {
+                    allowedPsrs = [...allowedPsrs, ...viewers];
+                }
+            }
+        } catch (e) {
+            console.error("Error parsing viewer permissions", e);
+        }
+
+        // Lọc trùng và loại bỏ giá trị rỗng
+        allowedPsrs = [...new Set(allowedPsrs)].filter(n => n && n.trim() !== '');
+
+        if (allowedPsrs.length > 0) {
+            query = query.in('psr', allowedPsrs);
+        } else {
+            // Nếu không có tên và không có quyền xem ai -> Không trả về dữ liệu nào
+            query = query.eq('id', -1); 
+        }
+    }
+    // -----------------------------------------
+
+    const { data, error } = await query;
     if(!silent) showLoading(false);
 
     if (error) {
@@ -253,14 +356,12 @@ async function fetchDetailData(silent = false) {
     }
 
     allData = data || [];
-    isDetailLoaded = true; // Mark loaded
+    isDetailLoaded = true; 
 
-    // Re-apply current local filter if search box has value
     const keyword = document.getElementById('detail-search')?.value || '';
     if(keyword) filterData(keyword);
     else displayedData = [...allData];
     
-    // Update Hot if it exists
     if(hot) updateTableData();
 }
 
@@ -269,34 +370,24 @@ function loadUserSettings() {
     if (raw) {
         try {
             const settings = JSON.parse(raw);
-            // Load sort config if exists
             savedSortConfig = settings.sortConfig;
-
-            // Reconcile saved settings with BASE_COLUMNS
             const savedKeys = new Set(settings.columnSettings.map(c => c.data));
             const newCols = BASE_COLUMNS.filter(c => !savedKeys.has(c.data)).map(c => ({
                 data: c.data,
-                isVisible: !c.defaultHidden, // Use defaultHidden property
+                isVisible: !c.defaultHidden,
                 isPinned: false,
                 width: c.width || 100,
-                className: '' // Default class name
+                className: '' 
             }));
-            
-            // Merge loaded settings with potential new columns
             const mergedSettings = [...settings.columnSettings, ...newCols];
-
-            // Filter out obsolete columns that are no longer in BASE_COLUMNS
             const currentKeys = new Set(BASE_COLUMNS.map(c => c.data));
             columnSettings = mergedSettings.filter(c => currentKeys.has(c.data));
-            
             return settings;
         } catch(e) { console.error("Settings load error", e); }
     }
-    
-    // Default Init
     columnSettings = BASE_COLUMNS.map(c => ({
         data: c.data,
-        isVisible: !c.defaultHidden, // Hide ID by default
+        isVisible: !c.defaultHidden, 
         isPinned: false,
         width: c.width || 100,
         className: ''
@@ -307,8 +398,6 @@ function loadUserSettings() {
 
 function saveUserSettings() {
     if (!hot) return;
-    
-    // Update columnSettings with current className from Handsontable metadata
     columnSettings.forEach(setting => {
         const visualIndex = hot.propToCol(setting.data);
         if (visualIndex !== null && visualIndex !== undefined && visualIndex >= 0) {
@@ -324,41 +413,34 @@ function saveUserSettings() {
             }
         }
     });
-
-    // Get Sort Config
     const sortConfig = hot.getPlugin('columnSorting').getSortConfig();
-    
     const settings = {
-        columnSettings: columnSettings, // Order, visibility, width, and alignment
+        columnSettings: columnSettings, 
         fixedColumnsLeft: hot.getSettings().fixedColumnsLeft,
-        sortConfig: sortConfig // Save sort preference
+        sortConfig: sortConfig 
     };
     localStorage.setItem(getStorageKey(), JSON.stringify(settings));
 }
 
 function getProcessedColumns() {
     const activeCols = [];
-    
     columnSettings.forEach(setting => {
         if (setting.isVisible) {
             const def = BASE_COLUMNS.find(c => c.data === setting.data);
             if (def) {
-                // Apply specific renderer or logic if needed
                 activeCols.push({ 
                     ...def, 
-                    title: def.titleKey ? t(def.titleKey) : def.data, // translate title
-                    width: setting.width || def.width, // Use persisted width
-                    className: setting.className || '' // Use persisted alignment
+                    title: def.titleKey ? t(def.titleKey) : def.data, 
+                    width: setting.width || def.width, 
+                    className: setting.className || '' 
                 });
             }
         }
     });
-
     return activeCols;
 }
 
-// --- Date Filtering Logic ---
-
+// ... (Date Filtering Functions unchanged) ...
 function getDateRangeByType(type) {
     const now = new Date();
     const todayStr = now.toISOString().split('T')[0];
@@ -368,9 +450,9 @@ function getDateRangeByType(type) {
         start = todayStr;
         end = todayStr;
     } else if (type === 'week') {
-        const day = now.getDay() || 7; // Get current day number, make Sunday=7
+        const day = now.getDay() || 7; 
         const startOfWeek = new Date(now);
-        if (day !== 1) startOfWeek.setHours(-24 * (day - 1)); // Go back to Monday
+        if (day !== 1) startOfWeek.setHours(-24 * (day - 1)); 
         const endOfWeek = new Date(startOfWeek);
         endOfWeek.setDate(startOfWeek.getDate() + 6);
         start = startOfWeek.toISOString().split('T')[0];
@@ -427,18 +509,10 @@ function setupDateFilterModal() {
             
             if (targetDateColumnIndex !== null && hot) {
                 const filtersPlugin = hot.getPlugin('filters');
-                // Clear existing first to avoid stacking weirdly if logic changes
                 filtersPlugin.removeConditions(targetDateColumnIndex);
-                
-                if (start && end) {
-                    // Use 'between' condition. Handsontable expects date strings YYYY-MM-DD
-                    filtersPlugin.addCondition(targetDateColumnIndex, 'between', [start, end]);
-                } else if (start) {
-                    filtersPlugin.addCondition(targetDateColumnIndex, 'after', [start]); // Simplified logic
-                } else if (end) {
-                    filtersPlugin.addCondition(targetDateColumnIndex, 'before', [end]);
-                }
-                
+                if (start && end) filtersPlugin.addCondition(targetDateColumnIndex, 'between', [start, end]);
+                else if (start) filtersPlugin.addCondition(targetDateColumnIndex, 'after', [start]); 
+                else if (end) filtersPlugin.addCondition(targetDateColumnIndex, 'before', [end]);
                 filtersPlugin.filter();
                 hot.render();
             }
@@ -450,18 +524,11 @@ function setupDateFilterModal() {
 function openDateFilter(colIndex) {
     targetDateColumnIndex = colIndex;
     const modal = document.getElementById('date-filter-modal');
-    
-    // Clear inputs or pre-fill?
-    // Let's clear for now to keep it simple, or user can select preset
     document.getElementById('filter-date-start').value = '';
     document.getElementById('filter-date-end').value = '';
-    
     modal.classList.remove('hidden');
 }
 
-// ---------------------------
-
-// Helper to generate Dropdown Menu Config dynamically (for translation)
 function getDropdownMenuConfig() {
     return {
         items: {
@@ -470,14 +537,13 @@ function getDropdownMenuConfig() {
             'filter_action_bar': {},
             '---------': {},
             'date_filter_custom': {
-                name: t('ctx_advanced_date_filter'), // Dynamic Translation
+                name: t('ctx_advanced_date_filter'), 
                 callback: function(key, selection, clickEvent) {
                     const visualColIndex = selection[0].start.col;
                     const physicalColIndex = this.toPhysicalColumn(visualColIndex);
                     openDateFilter(physicalColIndex);
                 },
                 hidden: function() {
-                    // Show only for date columns
                     const selection = this.getSelectedRangeLast();
                     if (!selection) return true;
                     const visualCol = selection.highlight.col;
@@ -492,39 +558,34 @@ function getDropdownMenuConfig() {
 
 function initHandsontable() {
     const container = document.getElementById('hot-container');
-    
     const userCols = getProcessedColumns();
-    
-    // Calculate fixed columns count based on Pinned settings
     let pinnedCount = columnSettings.filter(c => c.isVisible && c.isPinned).length;
 
     hot = new Handsontable(container, {
         data: [], 
         columns: userCols,
-        readOnly: true, // Grid is Read-only as requested
-        rowHeaders: false, // Hide the default "1, 2, 3..." STT column
+        readOnly: true, 
+        rowHeaders: false, 
         colHeaders: true,
         height: '100%',
         width: '100%',
         stretchH: 'all',
         fixedColumnsLeft: pinnedCount,
-        autoRowSize: true, // CRITICAL: Forces calculation of row heights to keep fixed/scrollable synced
-        viewportRowRenderingOffset: 20, // Increase render buffer for smoother scrolling
+        autoRowSize: true, 
+        viewportRowRenderingOffset: 20, 
         manualColumnResize: true,
         manualRowResize: true,
         contextMenu: true,
-        filters: true, // Enable Filters Plugin
+        filters: true, 
         columnSorting: {
             indicator: true,
             sortEmptyCells: true,
-            initialConfig: savedSortConfig // Apply saved sort config if exists
+            initialConfig: savedSortConfig 
         },
-        // Using Object configuration for dropdownMenu to add custom items
         dropdownMenu: getDropdownMenuConfig(),
         licenseKey: 'non-commercial-and-evaluation',
         autoWrapRow: true,
         autoWrapCol: true,
-        // Hooks
         afterColumnResize: (newSize, column) => {
             const visibleCols = columnSettings.filter(c => c.isVisible);
             if (visibleCols[column]) {
@@ -534,7 +595,7 @@ function initHandsontable() {
         },
         afterFilter: () => {
              updateFilterButtonState();
-             calculateHotTotals(); // Recalculate totals based on filtered view
+             calculateHotTotals(); 
         },
         afterSetCellMeta: (row, col, key, val) => {
             if (key === 'className') {
@@ -542,7 +603,7 @@ function initHandsontable() {
             }
         },
         afterColumnSort: (currentSortConfig, destinationSortConfigs) => {
-            saveUserSettings(); // Save sort config when user sorts
+            saveUserSettings(); 
         },
         afterSelectionEnd: (row, col, row2, col2) => {
             calculateSelectionStats(row, col, row2, col2);
@@ -556,21 +617,10 @@ function initHandsontable() {
 
 function updateTableData() {
     if (!hot) return;
-    
-    // Virtual Scrolling Fix: Load ALL displayed data into Handsontable
-    // This ensures the built-in filters work on the entire dataset, not just a sliced page.
     hot.loadData(displayedData);
-
-    // Update Footer Info to show total rows
     updateFooterInfo(displayedData.length);
-    
-    // Recalculate totals based on the new data loaded into grid
     calculateHotTotals();
-
-    // Ensure button state is correct after load
     updateFilterButtonState();
-    
-    // Force render to recalculate row heights (fixes mobile misalignment)
     setTimeout(() => hot.render(), 100);
 }
 
@@ -578,18 +628,17 @@ function updateTableData() {
 function calculateHotTotals() {
     if (!hot) return;
 
-    // Get visible data from Handsontable (respects internal sorting and filtering)
     const visibleData = hot.getData(); 
     
-    // Find column indexes
     const quotaIdx = hot.propToCol('quota');
     const wonIdx = hot.propToCol('sl_trung');
     const statusIdx = hot.propToCol('tinh_trang');
 
     let totalQuota = 0;
+    let listingQuota = 0;
     let waitingQuota = 0;
     let winQty = 0;
-    let winQuotaForCalc = 0; // Needed to calculate Partial Loss (Sum of Quota for Win Items)
+    let winQuotaForCalc = 0; 
     let failQuota = 0;
 
     visibleData.forEach(row => {
@@ -598,29 +647,26 @@ function calculateHotTotals() {
             const w = (wonIdx !== null) ? (parseFloat(row[wonIdx]) || 0) : 0;
             const status = (statusIdx !== null) ? (row[statusIdx] || '') : '';
 
-            // 1. Quota is sum of total Quota column
             totalQuota += q;
 
-            // 2. Waiting is sum of Quota where status is Waiting
-            if (status === 'Waiting') {
+            if (status === 'Listing') {
+                listingQuota += q;
+            }
+            else if (status === 'Waiting') {
                 waitingQuota += q;
             } 
-            // 3. Win logic
             else if (status === 'Win') {
-                winQty += w; // Win (trúng) is sum of sl_trung
-                winQuotaForCalc += q; // Accumulate quota to calculate partial loss
+                winQty += w; 
+                winQuotaForCalc += q; 
             } 
-            // 4. Fail logic
             else if (status === 'Fail') {
-                failQuota += q; // Fail is sum of Quota
+                failQuota += q; 
             }
         }
     });
 
-    // 5. Partial Loss = Sum(Quota where Win) - Sum(sl_trung where Win)
     const partialLoss = winQuotaForCalc - winQty;
 
-    // Format number helper
     const fmt = (n) => n.toLocaleString('vi-VN');
     const pct = (n) => {
         if (totalQuota === 0) return '(0%)';
@@ -628,27 +674,43 @@ function calculateHotTotals() {
         return `(${p.toFixed(1)}%)`;
     };
 
-    // Update DOM
-    const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = fmt(val); };
-    const setPct = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = pct(val); };
+    const setVal = (id, val) => { 
+        const el = document.getElementById(id); 
+        if(el) el.textContent = fmt(val); 
+    };
+    const setPct = (id, val) => { 
+        const el = document.getElementById(id); 
+        if(el) el.textContent = pct(val); 
+    };
 
-    setVal('ft-total-quota', totalQuota);
-    
-    setVal('ft-waiting-val', waitingQuota);
-    setPct('ft-waiting-pct', waitingQuota);
+    // Update Mobile Stats IDs
+    setVal('mob-total-quota', totalQuota);
+    setVal('mob-listing-val', listingQuota);
+    setPct('mob-listing-pct', listingQuota);
+    setVal('mob-waiting-val', waitingQuota);
+    setPct('mob-waiting-pct', waitingQuota);
+    setVal('mob-win-val', winQty);
+    setPct('mob-win-pct', winQty);
+    setVal('mob-fail-val', failQuota);
+    setPct('mob-fail-pct', failQuota);
+    setVal('mob-partial-val', partialLoss);
+    setPct('mob-partial-pct', partialLoss);
 
-    setVal('ft-win-val', winQty);
-    setPct('ft-win-pct', winQty); // Calculates Win Qty % of Total Quota
-
-    setVal('ft-fail-val', failQuota);
-    setPct('ft-fail-pct', failQuota);
-
-    setVal('ft-partial-val', partialLoss);
-    setPct('ft-partial-pct', partialLoss);
+    // Update Desktop Stats IDs
+    setVal('desk-total-quota', totalQuota);
+    setVal('desk-listing-val', listingQuota);
+    setPct('desk-listing-pct', listingQuota);
+    setVal('desk-waiting-val', waitingQuota);
+    setPct('desk-waiting-pct', waitingQuota);
+    setVal('desk-win-val', winQty);
+    setPct('desk-win-pct', winQty);
+    setVal('desk-fail-val', failQuota);
+    setPct('desk-fail-pct', failQuota);
+    setVal('desk-partial-val', partialLoss);
+    setPct('desk-partial-pct', partialLoss);
 }
 
 function updateFooterInfo(total) {
-    // Simplified Footer Info for Virtual Scrolling
     const rowCountEl = document.getElementById('footer-row-count');
     if (rowCountEl) {
         rowCountEl.textContent = `${total} ${t('txt_rows')}`;
@@ -671,15 +733,11 @@ function calculateSelectionStats(r1, c1, r2, c2) {
     let max = null;
     let hasNumeric = false;
 
-    // Flatten array
     const flatData = selectedData.flat();
 
     flatData.forEach(val => {
         if (val !== null && val !== '' && val !== undefined) {
             count++;
-            // Check if numeric
-            // Replace dots/commas if needed, but Handsontable numeric cells usually return numbers or raw strings
-            // Assuming clean numbers or strings parsable as numbers
             const num = parseFloat(val);
             if (!isNaN(num)) {
                 hasNumeric = true;
@@ -721,7 +779,6 @@ function filterData(keyword) {
             );
         });
     }
-    // currentPage = 1; // Removed pagination logic
     updateTableData();
 }
 
@@ -733,26 +790,21 @@ function updateFilterButtonState() {
     
     if(!btn || !container) return;
 
-    // Check if any filter conditions exist
     const hasConditions = plugin.conditionCollection && !plugin.conditionCollection.isEmpty();
     const isVisible = !container.classList.contains('filters-hidden');
 
-    // Remove previous states
     btn.classList.remove('bg-blue-100', 'text-blue-700', 'bg-red-50', 'text-red-600', 'hover:bg-red-100');
     btn.classList.add('bg-gray-100', 'text-gray-700');
 
     if (hasConditions) {
-        // STATE 3: Active Filters -> Clear Filter Button
         btn.innerHTML = `
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             <span class="line-through" data-i18n="btn_clear_filter">${t('btn_clear_filter')}</span>
         `;
         btn.classList.remove('bg-gray-100', 'text-gray-700');
         btn.classList.add('bg-red-50', 'text-red-600', 'hover:bg-red-100');
-        // Ensure arrows are visible if we have filters, user needs to see where filters are
         container.classList.remove('filters-hidden');
     } else if (isVisible) {
-        // STATE 2: Open (No filters) -> Hide Filter Button
         btn.innerHTML = `
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
             <span data-i18n="btn_hide_filter">${t('btn_hide_filter')}</span>
@@ -760,7 +812,6 @@ function updateFilterButtonState() {
         btn.classList.remove('bg-gray-100', 'text-gray-700');
         btn.classList.add('bg-blue-100', 'text-blue-700');
     } else {
-        // STATE 1: Closed -> Show Filter Button
         btn.innerHTML = `
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
             <span data-i18n="btn_show_filter">${t('btn_show_filter')}</span>
@@ -775,48 +826,44 @@ function handleFilterButtonClick() {
     const hasConditions = plugin.conditionCollection && !plugin.conditionCollection.isEmpty();
 
     if (hasConditions) {
-        // Action: Clear Filters
         plugin.clearConditions();
         plugin.filter();
         hot.render();
-        // UI will update via afterFilter hook
     } else {
-        // Action: Toggle Visibility
         container.classList.toggle('filters-hidden');
         updateFilterButtonState();
     }
 }
 
 function setupToolbarListeners() {
-    // Removed Pagination Buttons Logic because we are using Virtual Scrolling for filtering accuracy.
-    // The table now scrolls to show all rows.
-
-    // Search
     const searchInput = document.getElementById('detail-search');
     if(searchInput) searchInput.addEventListener('input', (e) => {
         filterData(e.target.value);
     });
 
-    // 3-State Filter Button
     const filterBtn = document.getElementById('btn-toggle-header-filter');
     if(filterBtn) filterBtn.onclick = handleFilterButtonClick;
 
-    // Listen for language change
+    const statsToggleBtn = document.getElementById('btn-toggle-stats');
+    if(statsToggleBtn) {
+        statsToggleBtn.onclick = () => {
+            const statsPanel = document.getElementById('stats-panel-mobile'); // Changed to mobile specific ID
+            if(statsPanel) {
+                statsPanel.classList.toggle('hidden');
+                // Re-calculate dimensions for Handsontable if needed, though flex should handle it
+                if(hot) setTimeout(() => hot.refreshDimensions(), 100);
+            }
+        };
+    }
+
     window.addEventListener('languageChanged', (e) => {
         if(!hot) return;
-        // Re-construct settings to get new titles
         const userCols = getProcessedColumns();
-        
-        // Update Columns and Dropdown Menu Translation
         hot.updateSettings({ 
             columns: userCols,
             dropdownMenu: getDropdownMenuConfig() 
         });
-        
-        // Update button text states
         updateFilterButtonState();
-        
-        // Re-calculate selection stats (if any selection exists) to update labels
         const selected = hot.getSelected();
         if(selected && selected.length > 0) {
             const [r1, c1, r2, c2] = selected[0];
@@ -825,8 +872,7 @@ function setupToolbarListeners() {
     });
 }
 
-// --- Export Functionality ---
-
+// ... (Export Functionality and Column Manager Logic unchanged) ...
 function setupExportListeners() {
     const btn = document.getElementById('btn-export-excel');
     const dropdown = document.getElementById('export-dropdown');
@@ -840,7 +886,6 @@ function setupExportListeners() {
         dropdown.classList.toggle('hidden');
     };
 
-    // Close on click outside
     document.addEventListener('click', (e) => {
         if (!dropdown.classList.contains('hidden') && !dropdown.contains(e.target) && !btn.contains(e.target)) {
             dropdown.classList.add('hidden');
@@ -860,54 +905,34 @@ function setupExportListeners() {
 
 function exportToExcel(type) {
     if (!hot) return;
-    
     showLoading(true);
-    
-    setTimeout(() => { // Timeout to allow loading spinner to render
+    setTimeout(() => {
         try {
-            // 1. Get Visible Columns and Headers
             const visibleColSettings = columnSettings.filter(c => c.isVisible);
-            // Get Titles for headers
             const headers = visibleColSettings.map(setting => {
                 const def = BASE_COLUMNS.find(c => c.data === setting.data);
                 return def ? (def.titleKey ? t(def.titleKey) : def.data) : setting.data;
             });
-            
-            // 2. Prepare Data
             let dataToExport = [];
-            
             if (type === 'filtered') {
-                // Use Handsontable's visible data (preserves sorting, internal filtering, and search)
-                const hotData = hot.getData(); // Array of arrays, matching current visual columns
-                
-                // Hot data corresponds to visual columns. We need to match with our headers.
-                // Handsontable getData() returns visible columns by default if not configured otherwise.
+                const hotData = hot.getData();
                 dataToExport = hotData;
             } else {
-                // Export All Data (from DB/allData), mapped to visible columns
                 dataToExport = allData.map(row => {
                     return visibleColSettings.map(setting => {
                         return row[setting.data];
                     });
                 });
             }
-            
-            // 3. Create Worksheet
-            // Add headers as first row
             const wsData = [headers, ...dataToExport];
             const ws = XLSX.utils.aoa_to_sheet(wsData);
-            
-            // 4. Create Workbook and Download
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "ChiTiet");
-            
             const now = new Date();
             const timeStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
             const fileName = `Export_ChiTiet_${type}_${timeStr}.xlsx`;
-            
             XLSX.writeFile(wb, fileName);
             showToast("Xuất Excel thành công!", "success");
-
         } catch (e) {
             console.error(e);
             showToast("Lỗi khi xuất Excel: " + e.message, "error");
@@ -917,17 +942,12 @@ function exportToExcel(type) {
     }, 100);
 }
 
-
-// --- Column Manager Logic ---
-
 function setupColumnManager() {
     const btn = document.getElementById('btn-col-settings');
     const modal = document.getElementById('column-settings-modal');
     const closeBtn = document.getElementById('close-col-settings-btn');
     const saveBtn = document.getElementById('btn-save-cols');
     const listContainer = document.getElementById('column-list-container');
-    
-    // Sortable JS instance
     let sortable;
 
     if(!btn) return;
@@ -942,15 +962,12 @@ function setupColumnManager() {
 
     const renderColumnList = () => {
         listContainer.innerHTML = '';
-        
         columnSettings.forEach((col, index) => {
             const def = BASE_COLUMNS.find(c => c.data === col.data);
-            if (!def) return; // Should not happen
-
+            if (!def) return;
             const el = document.createElement('div');
             el.className = 'flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600 cursor-pointer';
             el.dataset.data = col.data;
-            
             el.innerHTML = `
                 <div class="flex items-center gap-3 pointer-events-none">
                     <svg class="w-4 h-4 text-gray-400 cursor-grab pointer-events-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
@@ -961,24 +978,15 @@ function setupColumnManager() {
                      <svg class="w-4 h-4 transform rotate-45" fill="currentColor" viewBox="0 0 20 20"><path d="M6 6V2c0-1.1.9-2 2-2h1a2 2 0 012 2v4l5 5v3h-6v4h-2v-4H2v-3l4-4z"/></svg>
                 </button>
             `;
-            
-            // Toggle Visibility when clicking the row
             el.onclick = (e) => {
-                // Prevent toggle if clicking Pin or Drag handle explicitly
                 if (e.target.closest('.btn-pin') || e.target.closest('.cursor-grab')) return;
-                
                 const checkbox = el.querySelector('.col-vis-check');
                 checkbox.checked = !checkbox.checked;
                 col.isVisible = checkbox.checked;
             };
-
-            // Toggle Pin
             el.querySelector('.btn-pin').onclick = (e) => {
                 e.stopPropagation();
-                // Toggle state
                 col.isPinned = !col.isPinned;
-                
-                // Visual update
                 if(col.isPinned) {
                     e.currentTarget.classList.add('pin-active', 'text-blue-500');
                     e.currentTarget.classList.remove('text-gray-400');
@@ -986,11 +994,9 @@ function setupColumnManager() {
                     e.currentTarget.classList.remove('pin-active', 'text-blue-500');
                     e.currentTarget.classList.add('text-gray-400');
                 }
-                
                 reorderColumnsInMemory();
-                renderColumnList(); // Re-render list
+                renderColumnList();
             };
-
             listContainer.appendChild(el);
         });
 
@@ -1000,7 +1006,6 @@ function setupColumnManager() {
             ghostClass: 'opacity-50',
             handle: '.cursor-grab',
             onEnd: () => {
-                // Update order in columnSettings based on DOM order
                 const newOrder = [];
                 listContainer.querySelectorAll('[data-data]').forEach(el => {
                     const dataKey = el.dataset.data;
@@ -1013,27 +1018,21 @@ function setupColumnManager() {
     };
 
     const reorderColumnsInMemory = () => {
-        // Move Pinned to top, keep relative order otherwise
         columnSettings.sort((a, b) => {
             if (a.isPinned && !b.isPinned) return -1;
             if (!a.isPinned && b.isPinned) return 1;
-            return 0; // Keep current relative order
+            return 0;
         });
     };
 
     if(saveBtn) saveBtn.onclick = () => {
         saveUserSettings();
-        // Re-init Handsontable with new columns
         const userCols = getProcessedColumns();
-        
-        // Calc Fixed Columns
         let pinnedCount = columnSettings.filter(c => c.isVisible && c.isPinned).length;
-
         hot.updateSettings({
             columns: userCols,
             fixedColumnsLeft: pinnedCount
         });
-
         closeModal();
     };
 }

@@ -1,10 +1,14 @@
 
+
+
 import { sb, cache, currentUser, setCurrentUser, showLoading, showToast, showConfirm, DEFAULT_AVATAR_URL, updateSidebarAvatar, sanitizeFileName, onlineUsers, handleLogout } from './app.js';
 import { setLanguage, getCurrentLanguage } from './lang.js';
 
 let selectedAvatarFile = null;
 let isViewLoaded = false;
 let currentEditingUserGmail = null;
+let currentViewerUserGmail = null; // Track which user we are editing viewers for
+let cachedPotentialViewers = null; // Cache distinct list
 
 const APP_VIEWS = [
     { id: 'view-phat-trien', labelI18n: 'header_dashboard' }, 
@@ -341,6 +345,34 @@ const VIEW_TEMPLATE = `
         </div>
     </div>
 </div>
+
+<!-- VIEWER CONFIGURATION MODAL (For User Management) -->
+<div id="viewer-modal" class="hidden fixed inset-0 z-[10000] flex items-center justify-center modal-backdrop p-4">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
+        <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700 rounded-t-xl">
+            <div>
+                <h3 class="text-lg font-bold text-gray-800 dark:text-white">Cấu hình xem dữ liệu</h3>
+                <p id="viewer-user-gmail" class="text-sm text-gray-500 dark:text-gray-400 mt-1"></p>
+            </div>
+            <button id="close-viewer-btn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+        <div class="p-3 border-b dark:border-gray-700 bg-white dark:bg-gray-800">
+            <input type="text" id="viewer-search" placeholder="Tìm kiếm người dùng/PSR..." class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-1 focus:ring-blue-500 outline-none">
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 custom-scrollbar bg-white dark:bg-gray-800">
+            <div id="viewer-list-container" class="space-y-2">
+                <!-- Checkboxes injected here -->
+                <div class="text-center text-gray-500 text-sm">Đang tải danh sách...</div>
+            </div>
+        </div>
+        <div class="p-4 border-t dark:border-gray-700 flex justify-end gap-3 bg-gray-50 dark:bg-gray-800 rounded-b-xl">
+            <button id="cancel-viewer-btn" class="px-4 py-2 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 font-medium text-sm">Hủy</button>
+            <button id="save-viewer-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md text-sm">Lưu cấu hình</button>
+        </div>
+    </div>
+</div>
 `;
 
 // --- INITIALIZATION ---
@@ -417,6 +449,17 @@ export async function initCaiDatView() {
     if(closePermBtn) closePermBtn.onclick = closePermissionModal;
     if(cancelPermBtn) cancelPermBtn.onclick = closePermissionModal;
     if(savePermBtn) savePermBtn.onclick = savePermissions;
+
+    // Viewer Modal Listeners
+    const closeViewerBtn = document.getElementById('close-viewer-btn');
+    const cancelViewerBtn = document.getElementById('cancel-viewer-btn');
+    const saveViewerBtn = document.getElementById('save-viewer-btn');
+    const viewerSearch = document.getElementById('viewer-search');
+
+    if(closeViewerBtn) closeViewerBtn.onclick = closeViewerModal;
+    if(cancelViewerBtn) cancelViewerBtn.onclick = closeViewerModal;
+    if(saveViewerBtn) saveViewerBtn.onclick = saveViewers;
+    if(viewerSearch) viewerSearch.addEventListener('input', filterViewerList);
 }
 
 // Function called by app.js every time the view is shown
@@ -636,6 +679,13 @@ function attachDynamicListeners(tabName) {
                     const gmail = permBtn.dataset.gmail;
                     const user = cache.userList.find(u => u.gmail === gmail);
                     if(user) openPermissionModal(user);
+                    return;
+                }
+                const viewerBtn = e.target.closest('.viewer-config-btn');
+                if (viewerBtn) {
+                    const gmail = viewerBtn.dataset.gmail;
+                    const user = cache.userList.find(u => u.gmail === gmail);
+                    if(user) openViewerModal(user);
                     return;
                 }
                 const optionsBtn = e.target.closest('.user-options-btn');
@@ -910,6 +960,17 @@ function renderUserList(users) {
             ? "bg-gray-100 text-gray-400 cursor-not-allowed border-gray-200 dark:bg-gray-700 dark:text-gray-500 dark:border-gray-600" 
             : "bg-green-50 text-green-600 hover:bg-green-100 dark:bg-green-900/50 dark:text-green-300 dark:hover:bg-green-800/50 border-green-100 dark:border-green-800";
         
+        // Parse viewers count
+        let viewerCount = 0;
+        try {
+            if (user.viewer) {
+                const viewers = JSON.parse(user.viewer);
+                if (Array.isArray(viewers)) viewerCount = viewers.length;
+            }
+        } catch(e) {}
+
+        const viewerBtnClass = "bg-blue-50 text-blue-600 hover:bg-blue-100 dark:bg-blue-900/50 dark:text-blue-300 dark:hover:bg-blue-800/50 border-blue-100 dark:border-blue-800";
+
         const row = document.createElement('div');
         row.className = 'p-3 md:p-4 border-b border-gray-100 bg-white hover:bg-gray-50 dark:bg-gray-800 dark:hover:bg-gray-700 transition-colors last:border-0 dark:border-gray-700';
         row.innerHTML = `
@@ -933,6 +994,9 @@ function renderUserList(users) {
                         <option value="User" ${user.phan_quyen === 'User' ? 'selected' : ''}>User</option>
                         <option value="View" ${user.phan_quyen === 'View' ? 'selected' : ''}>View</option>
                     </select>
+                    <button data-gmail="${user.gmail}" class="viewer-config-btn text-xs ${viewerBtnClass} font-medium px-3 py-2 rounded border transition-colors whitespace-nowrap" title="Cấu hình xem dữ liệu">
+                        Data (${viewerCount})
+                    </button>
                     <button data-gmail="${user.gmail}" class="reset-password-btn text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/50 dark:text-indigo-300 dark:hover:bg-indigo-800/50 font-medium px-3 py-2 rounded border border-indigo-100 dark:border-indigo-800 transition-colors whitespace-nowrap" ${isCurrentUser ? 'disabled' : ''}>
                         Đặt lại MK
                     </button>
@@ -956,6 +1020,133 @@ function renderUserList(users) {
     });
     setLanguage(getCurrentLanguage()); // Translate new buttons
 }
+
+// --- Viewer Modal Logic ---
+
+async function fetchViewerSourceData() {
+    if (cachedPotentialViewers) return cachedPotentialViewers;
+
+    try {
+        // Run in parallel for speed
+        const [listingRes, userRes] = await Promise.all([
+            sb.from('listing').select('psr'),
+            sb.from('user').select('ho_ten')
+        ]);
+
+        const psrList = listingRes.data ? listingRes.data.map(l => l.psr).filter(p => p && p.trim()) : [];
+        const userList = userRes.data ? userRes.data.map(u => u.ho_ten).filter(n => n && n.trim()) : [];
+
+        // 3. Merge and Sort
+        const combined = [...new Set([...psrList, ...userList])].sort((a, b) => a.localeCompare(b));
+        
+        cachedPotentialViewers = combined;
+        return combined;
+    } catch (e) {
+        console.error("Error fetching viewer options", e);
+        return [];
+    }
+}
+
+async function openViewerModal(user) {
+    currentViewerUserGmail = user.gmail;
+    const modal = document.getElementById('viewer-modal');
+    const titleUser = document.getElementById('viewer-user-gmail');
+    const container = document.getElementById('viewer-list-container');
+    const searchInput = document.getElementById('viewer-search');
+
+    if (!modal || !container) return;
+
+    titleUser.textContent = `${user.ho_ten} (${user.gmail})`;
+    searchInput.value = ''; // Reset search
+    container.innerHTML = '<div class="text-center text-gray-500 text-sm py-4">Đang tải danh sách...</div>';
+    modal.classList.remove('hidden');
+
+    const options = await fetchViewerSourceData();
+    
+    // Parse current selection
+    let currentSelection = [];
+    try {
+        if (user.viewer) {
+            currentSelection = JSON.parse(user.viewer);
+            if (!Array.isArray(currentSelection)) currentSelection = [];
+        }
+    } catch(e) { currentSelection = []; }
+
+    renderViewerList(options, currentSelection);
+}
+
+function renderViewerList(options, selectedItems) {
+    const container = document.getElementById('viewer-list-container');
+    container.innerHTML = '';
+
+    if (options.length === 0) {
+        container.innerHTML = '<div class="text-center text-gray-500 text-sm">Không có dữ liệu để chọn.</div>';
+        return;
+    }
+
+    options.forEach(name => {
+        const isChecked = selectedItems.includes(name);
+        const div = document.createElement('div');
+        div.className = 'viewer-item flex items-center p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer';
+        div.innerHTML = `
+            <input type="checkbox" class="viewer-checkbox w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700" value="${name}" ${isChecked ? 'checked' : ''}>
+            <span class="ml-3 text-sm text-gray-700 dark:text-gray-200">${name}</span>
+        `;
+        div.onclick = (e) => {
+            if (e.target.type !== 'checkbox') {
+                const cb = div.querySelector('input');
+                cb.checked = !cb.checked;
+            }
+        };
+        container.appendChild(div);
+    });
+}
+
+function filterViewerList() {
+    const term = document.getElementById('viewer-search').value.toLowerCase();
+    const items = document.querySelectorAll('.viewer-item');
+    items.forEach(item => {
+        const name = item.querySelector('span').textContent.toLowerCase();
+        if (name.includes(term)) {
+            item.classList.remove('hidden');
+        } else {
+            item.classList.add('hidden');
+        }
+    });
+}
+
+function closeViewerModal() {
+    document.getElementById('viewer-modal').classList.add('hidden');
+    currentViewerUserGmail = null;
+}
+
+async function saveViewers() {
+    if (!currentViewerUserGmail) return;
+
+    const selected = [];
+    document.querySelectorAll('.viewer-checkbox:checked').forEach(cb => {
+        selected.push(cb.value);
+    });
+
+    showLoading(true);
+    try {
+        const { error } = await sb.from('user')
+            .update({ viewer: JSON.stringify(selected) })
+            .eq('gmail', currentViewerUserGmail);
+
+        if (error) throw error;
+
+        showToast("Cập nhật cấu hình xem thành công!", "success");
+        closeViewerModal();
+        fetchUsers(); // Refresh main list to update count
+    } catch (e) {
+        showToast("Lỗi khi lưu: " + e.message, "error");
+    } finally {
+        showLoading(false);
+    }
+}
+
+// ... (Existing Permission Modal functions: openPermissionModal, closePermissionModal, savePermissions) ...
 
 function openPermissionModal(user) {
     currentEditingUserGmail = user.gmail;

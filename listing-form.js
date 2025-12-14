@@ -2,14 +2,17 @@
 import { sb, showToast, showLoading, showConfirm, currentUser } from './app.js';
 import { translations, getCurrentLanguage } from './lang.js';
 import { logHistory } from './lichsu.js';
-// Removed 'listing.js' import to fix circular dependency. 
-// Using window.notifyAdmins, window.fetchListings, window.getListingsCache instead.
 
 let currentFiles = [];
 let currentMaterials = [];
 let originalMaThau = null;
 let isReadOnlyMode = false;
 let initialFormState = null;
+let provinceData = []; // Store province/area mapping
+let productCodes = []; // Store available product codes
+
+// Danh sách NPP giới hạn
+const PREDEFINED_NPP = ["Harphaco Hà Nội", "Harpharco Hồ Chí Minh", "Sakae", "Long Giang"];
 
 const t = (key) => {
     const lang = getCurrentLanguage();
@@ -23,6 +26,7 @@ function getFormState() {
         ma_thau: document.getElementById('l-ma-thau').value,
         nam: document.getElementById('l-nam').value,
         benh_vien: document.getElementById('l-benh-vien').value,
+        khoa: document.getElementById('l-khoa')?.value || '',
         tinh: document.getElementById('l-tinh').value,
         khu_vuc: document.getElementById('l-khu-vuc').value,
         loai: document.getElementById('l-loai').value,
@@ -44,13 +48,13 @@ function getFormState() {
 function renderMaterialList(readOnly) {
     const container = document.getElementById('material-list-body');
     const emptyMsg = document.getElementById('empty-material-msg');
+    const totalFooter = document.getElementById('material-total-footer');
     
     if(!container) return;
     container.innerHTML = '';
     
     if (currentMaterials.length === 0) {
         if(emptyMsg) emptyMsg.classList.remove('hidden');
-        return;
     } else {
         if(emptyMsg) emptyMsg.classList.add('hidden');
     }
@@ -65,34 +69,52 @@ function renderMaterialList(readOnly) {
         totalWon += wonVal;
 
         const tr = document.createElement('tr');
-        tr.className = 'bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700';
+        tr.className = 'bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700 relative';
+        
+        // Cấu trúc Dropdown cho Mã VT
         tr.innerHTML = `
-            <td class="px-3 py-2">
-                <input type="text" class="w-full px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" value="${item.ma_vt || ''}" placeholder="Mã VT" onchange="window.updateMaterial(${index}, 'ma_vt', this.value)" ${readOnly ? 'disabled' : ''}>
+            <td class="px-2 py-2 relative">
+                <div class="relative group">
+                    <input type="text" id="mat-input-${index}" class="w-full px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" 
+                        value="${item.ma_vt || ''}" 
+                        placeholder="Mã VT" 
+                        autocomplete="off"
+                        ${readOnly ? 'disabled' : ''}>
+                    <ul id="mat-list-${index}" class="custom-dropdown-list custom-scrollbar"></ul>
+                </div>
             </td>
-            <td class="px-3 py-2">
-                <input type="number" class="w-full px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white no-spinner appearance-none m-0" value="${item.quota || ''}" placeholder="0" onchange="window.updateMaterial(${index}, 'quota', this.value)" ${readOnly ? 'disabled' : ''}>
+            <td class="px-1 py-2">
+                <input type="number" class="w-full px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white no-spinner appearance-none m-0 text-center" value="${item.quota || ''}" placeholder="0" onchange="window.updateMaterial(${index}, 'quota', this.value)" ${readOnly ? 'disabled' : ''}>
             </td>
-            <td class="px-3 py-2">
-                <input type="number" class="w-full px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white no-spinner appearance-none m-0" value="${item.sl_trung || ''}" placeholder="0" onchange="window.updateMaterial(${index}, 'sl_trung', this.value)" ${readOnly ? 'disabled' : ''}>
+            <td class="px-1 py-2">
+                <input type="number" class="w-full px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white no-spinner appearance-none m-0 text-center" value="${item.sl_trung || ''}" placeholder="0" onchange="window.updateMaterial(${index}, 'sl_trung', this.value)" ${readOnly ? 'disabled' : ''}>
             </td>
-            <td class="px-3 py-2 text-right">
-                ${!readOnly ? `<button type="button" onclick="window.removeMaterial(${index})" class="text-red-500 hover:text-red-700"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>` : ''}
+            <td class="px-1 py-2 text-right">
+                ${!readOnly ? `<button type="button" onclick="window.removeMaterial(${index})" class="text-red-500 hover:text-red-700 p-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>` : ''}
             </td>
         `;
         container.appendChild(tr);
+
+        // Khởi tạo Autocomplete cho dòng này ngay lập tức
+        setupSingleAutocomplete(`mat-input-${index}`, `mat-list-${index}`, productCodes, (val) => {
+            window.updateMaterial(index, 'ma_vt', val);
+        });
+        
+        const inputEl = document.getElementById(`mat-input-${index}`);
+        if(inputEl) {
+            inputEl.onchange = (e) => window.updateMaterial(index, 'ma_vt', e.target.value);
+        }
     });
 
-    // Add Total Row
-    const totalRow = document.createElement('tr');
-    totalRow.className = 'bg-gray-100 dark:bg-gray-700 font-bold text-xs sticky bottom-0 z-10 border-t-2 border-gray-200 dark:border-gray-600 shadow-sm';
-    totalRow.innerHTML = `
-        <td class="px-3 py-2 text-right">Tổng:</td>
-        <td class="px-3 py-2 text-left pl-4">${totalQuota.toLocaleString('vi-VN')}</td>
-        <td class="px-3 py-2 text-left pl-4">${totalWon.toLocaleString('vi-VN')}</td>
-        <td class="px-3 py-2"></td>
-    `;
-    container.appendChild(totalRow);
+    // Update Fixed Footer (Using Flexbox to mimic table columns)
+    if (totalFooter) {
+        totalFooter.innerHTML = `
+            <div class="flex-1 text-right pr-2 text-gray-600 dark:text-gray-300 font-bold">Tổng:</div>
+            <div class="w-20 text-center px-1 font-bold text-blue-600 dark:text-blue-400 border-l dark:border-gray-600">${totalQuota.toLocaleString('vi-VN')}</div>
+            <div class="w-20 text-center px-1 font-bold text-green-600 dark:text-green-400 border-l dark:border-gray-600">${totalWon.toLocaleString('vi-VN')}</div>
+            <div class="w-8"></div>
+        `;
+    }
 }
 
 export function addMaterialRow() {
@@ -118,15 +140,27 @@ window.removeMaterial = function(index) {
     renderMaterialList(isReadOnlyMode);
 };
 
-// --- Autocomplete Logic ---
+// --- Autocomplete & Data Fetching ---
+
+async function fetchAuxiliaryData() {
+    // Fetch Provinces
+    if (provinceData.length === 0) {
+        const { data } = await sb.from('tinh_thanh').select('tinh, khu_vuc');
+        if (data) provinceData = data;
+    }
+    
+    // Fetch Products for Autocomplete
+    if (productCodes.length === 0) {
+        const { data } = await sb.from('product').select('ma_vt');
+        if (data) productCodes = data.map(p => p.ma_vt);
+    }
+}
 
 function setupAutocompletes(data) {
+    // Exclude 'nha_phan_phoi' from automatic data extraction, we use PREDEFINED_NPP
     const fields = [
         { key: 'benh_vien', inputId: 'l-benh-vien', listId: 'list-benh-vien' },
-        { key: 'tinh', inputId: 'l-tinh', listId: 'list-tinh' },
-        { key: 'khu_vuc', inputId: 'l-khu-vuc', listId: 'list-khu-vuc' },
         { key: 'loai', inputId: 'l-loai', listId: 'list-loai' },
-        { key: 'nha_phan_phoi', inputId: 'l-npp', listId: 'list-npp' },
         { key: 'nganh', inputId: 'l-nganh', listId: 'list-nganh' },
         { key: 'psr', inputId: 'l-psr', listId: 'list-psr' },
         { key: 'quan_ly', inputId: 'l-quan-ly', listId: 'list-quan-ly' }
@@ -136,9 +170,17 @@ function setupAutocompletes(data) {
         const uniqueValues = [...new Set(data.map(item => item[field.key]).filter(v => v && v.trim() !== ''))].sort();
         setupSingleAutocomplete(field.inputId, field.listId, uniqueValues);
     });
+    
+    // Setup Province Autocomplete manually from provinceData
+    const provinces = [...new Set(provinceData.map(p => p.tinh))].sort();
+    setupSingleAutocomplete('l-tinh', 'list-tinh', provinces);
+
+    // Setup NPP Autocomplete with PREDEFINED list
+    setupSingleAutocomplete('l-npp', 'list-npp', PREDEFINED_NPP);
 }
 
-function setupSingleAutocomplete(inputId, listId, values) {
+// Updated Helper: Added optional onSelect callback
+function setupSingleAutocomplete(inputId, listId, values, onSelect = null) {
     const input = document.getElementById(inputId);
     const list = document.getElementById(listId);
     if (!input || !list) return;
@@ -146,20 +188,28 @@ function setupSingleAutocomplete(inputId, listId, values) {
     const renderList = (filterText = '') => {
         if(isReadOnlyMode) return;
         const lowerFilter = filterText.toLowerCase();
+        
+        // Filter and limit to 100 items for performance
         const filtered = values.filter(v => v.toLowerCase().includes(lowerFilter));
+        
         if (filtered.length === 0) {
             list.classList.remove('show');
             return;
         }
-        list.innerHTML = filtered.map(val => `<li class="custom-dropdown-item">${val}</li>`).join('');
+        
+        const safeLimit = 100;
+        const itemsToRender = filtered.slice(0, safeLimit);
+
+        list.innerHTML = itemsToRender.map(val => `<li class="custom-dropdown-item">${val}</li>`).join('');
         list.classList.add('show');
+        
         list.querySelectorAll('li').forEach(li => {
             li.addEventListener('mousedown', (e) => {
                 e.preventDefault();
                 input.value = li.textContent;
                 list.classList.remove('show');
-                input.dispatchEvent(new Event('input'));
-                if(inputId === 'l-benh-vien') generateMaThau(); // Trigger generation on selection
+                input.dispatchEvent(new Event('input')); // Trigger change
+                if(onSelect) onSelect(input.value);
             });
         });
     };
@@ -167,35 +217,225 @@ function setupSingleAutocomplete(inputId, listId, values) {
     input.onfocus = () => renderList(input.value);
     input.oninput = () => renderList(input.value);
     input.onblur = () => { setTimeout(() => list.classList.remove('show'), 150); };
+    
+    // Logic auto-fill Khu vuc based on Tinh (Only for Main Form)
+    if (inputId === 'l-tinh') {
+        input.addEventListener('input', () => {
+            const val = input.value;
+            const found = provinceData.find(p => p.tinh === val);
+            if (found) {
+                document.getElementById('l-khu-vuc').value = found.khu_vuc || '';
+            }
+        });
+    }
+    
+    if (inputId === 'l-benh-vien') {
+        input.addEventListener('input', generateMaThau);
+    }
 }
 
 // --- Main Modal Functions ---
 
 export async function openListingModal(item = null, readOnly = false, isPreFill = false) {
     const modal = document.getElementById('listing-modal');
+    
+    // 1. Updated HTML Structure:
+    //    - Tách bảng vật tư thành 2 phần: Scrollable Body và Fixed Footer.
+    //    - Sử dụng các class w-20, w-8 để đảm bảo căn chỉnh cột giữa Body và Footer.
+    document.getElementById('listing-modal-content').innerHTML = `
+        <div id="listing-modal-header" class="p-3 md:p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700 rounded-t-xl cursor-move select-none flex-shrink-0">
+            <h3 id="listing-modal-title" class="text-base md:text-lg font-bold text-gray-800 dark:text-white" data-i18n="modal_add_title">Thêm Mới Thầu</h3>
+            <div class="flex items-center gap-2">
+                <button onclick="window.viewListingHistory()" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 p-1" title="Xem lịch sử">
+                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                </button>
+                <button onclick="window.closeListingModal()" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 p-1">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+        </div>
+        <form id="listing-form" onsubmit="window.saveListing(event)" class="flex-1 flex flex-col overflow-hidden text-xs md:text-sm">
+             <input type="hidden" id="listing-id">
+             <input type="hidden" id="l-status" value="Listing">
+             
+             <div class="hidden">
+                 <input type="number" id="l-nam">
+                 <input type="date" id="l-ngay">
+                 <input type="text" id="l-ma-thau">
+             </div>
+
+             <!-- MOBILE LAYOUT FIX: Use flex-col. -->
+             <div class="flex-1 flex flex-col md:flex-row overflow-hidden bg-white dark:bg-gray-800">
+                 
+                 <!-- SECTION 1: INPUTS (General Info) - Scrollable on both, takes 2/3 on desktop -->
+                 <div class="w-full md:w-2/3 p-4 md:p-6 overflow-y-auto custom-scrollbar border-b md:border-b-0 md:border-r dark:border-gray-700 flex flex-col gap-4 flex-shrink-0 md:flex-shrink">
+                     <div class="grid grid-cols-6 gap-3 md:gap-4">
+                        <div class="col-span-4 relative group input-wrapper">
+                             <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_hospital">Bệnh Viện</span> <span class="text-red-500">*</span></label>
+                             <input type="text" id="l-benh-vien" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                             <ul id="list-benh-vien" class="custom-dropdown-list custom-scrollbar"></ul>
+                        </div>
+                        <div class="col-span-2 relative group input-wrapper">
+                             <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_department">Khoa</label>
+                             <input type="text" id="l-khoa" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                        </div>
+                        <div class="col-span-3 relative group input-wrapper">
+                            <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_province">Tỉnh</span> <span class="text-red-500">*</span></label>
+                            <input type="text" id="l-tinh" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                            <ul id="list-tinh" class="custom-dropdown-list custom-scrollbar"></ul>
+                        </div>
+                        <div class="col-span-3 relative group input-wrapper">
+                             <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_area">Khu Vực</span> <span class="text-red-500">*</span></label>
+                             <input type="text" id="l-khu-vuc" required readonly class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded bg-gray-100 dark:bg-gray-600 dark:border-gray-600 dark:text-white cursor-not-allowed">
+                        </div>
+                        <div class="col-span-3 relative group input-wrapper">
+                            <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_type">Loại</span> <span class="text-red-500">*</span></label>
+                            <input type="text" id="l-loai" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                            <ul id="list-loai" class="custom-dropdown-list custom-scrollbar"></ul>
+                        </div>
+                        
+                        <!-- Nhà Phân Phối với nút Add -->
+                         <div class="col-span-3 relative group input-wrapper">
+                            <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_distributor">Nhà Phân Phối</span> <span class="text-red-500">*</span></label>
+                            <div class="flex gap-1">
+                                <div class="relative flex-1">
+                                    <input type="text" id="l-npp" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                                    <ul id="list-npp" class="custom-dropdown-list custom-scrollbar"></ul>
+                                </div>
+                                <button type="button" id="btn-add-npp" class="px-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-200" title="Thêm NPP khác">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="col-span-3">
+                            <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_signed_date">Ngày Ký</label>
+                            <input type="date" id="l-ngay-ky" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                        </div>
+                        <div class="col-span-3">
+                            <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_end_date">Ngày Kết Thúc</label>
+                            <input type="date" id="l-ngay-kt" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                        </div>
+                        <div class="col-span-3 relative group input-wrapper">
+                            <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_sector">Ngành</label>
+                            <input type="text" id="l-nganh" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                            <ul id="list-nganh" class="custom-dropdown-list custom-scrollbar"></ul>
+                        </div>
+                        
+                        <div id="psr-container" class="col-span-3 relative group input-wrapper">
+                             <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_psr">PSR</label>
+                             <input type="text" id="l-psr" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                             <ul id="list-psr" class="custom-dropdown-list custom-scrollbar"></ul>
+                        </div>
+                        
+                        <div class="col-span-3 relative group input-wrapper">
+                            <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_manager">Quản Lý</label>
+                            <input type="text" id="l-quan-ly" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                            <ul id="list-quan-ly" class="custom-dropdown-list custom-scrollbar"></ul>
+                        </div>
+                        <div class="col-span-3 relative group input-wrapper">
+                            <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1">Đính kèm tệp</label>
+                            <label id="btn-upload-label" class="cursor-pointer w-full bg-white dark:bg-gray-700 border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-300 hover:text-primary hover:border-primary hover:bg-blue-50 dark:hover:bg-gray-600 px-3 py-2 rounded flex items-center justify-center shadow-sm transition-all gap-2 h-[38px] md:h-[42px]" title="Tải tệp lên">
+                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
+                                 <span class="text-sm">Chọn tệp...</span>
+                                 <input type="file" id="file-upload-input" multiple class="hidden">
+                            </label>
+                        </div>
+                     </div>
+                     <div id="file-list-container" class="space-y-2 mt-4"></div>
+                 </div>
+                 
+                 <!-- SECTION 2: MATERIALS (Sticky Footer Layout) -->
+                 <div class="w-full md:w-1/3 bg-gray-50 dark:bg-gray-900/50 p-4 md:p-6 flex flex-col h-[400px] md:h-full border-t md:border-t-0 flex-shrink-0">
+                    <div class="flex justify-between items-center mb-3 flex-shrink-0">
+                        <h4 class="font-bold text-gray-700 dark:text-gray-200">Danh sách vật tư</h4>
+                        <button type="button" id="btn-add-material" class="text-xs px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center">
+                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Thêm
+                        </button>
+                    </div>
+                    
+                    <div class="bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 flex-1 flex flex-col overflow-hidden relative">
+                        
+                        <!-- SCROLLABLE PART -->
+                        <div class="flex-1 overflow-y-auto custom-scrollbar">
+                             <table class="w-full text-sm text-left">
+                                <thead class="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 uppercase text-[10px] sticky top-0 z-10 shadow-sm">
+                                    <tr>
+                                        <th class="px-2 py-2 pl-3">Mã VT</th>
+                                        <th class="px-1 py-2 w-20 text-center">Quota</th>
+                                        <th class="px-1 py-2 w-20 text-center">Trúng</th>
+                                        <th class="px-1 py-2 w-8"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="material-list-body" class="divide-y divide-gray-200 dark:divide-gray-700">
+                                </tbody>
+                            </table>
+                            <div id="empty-material-msg" class="p-4 text-center text-gray-400 text-xs italic hidden">Chưa có vật tư nào.</div>
+                        </div>
+
+                        <!-- FIXED FOOTER PART -->
+                        <div id="material-total-footer" class="bg-gray-100 dark:bg-gray-800 border-t dark:border-gray-700 p-2 text-xs font-bold flex items-center shadow-[0_-2px_4px_rgba(0,0,0,0.05)] z-20">
+                            <!-- Injected by JS -->
+                        </div>
+                    </div>
+                 </div>
+             </div>
+             
+             <!-- Footer -->
+             <div class="flex-none border-t dark:border-gray-700 bg-white dark:bg-gray-800 p-3 md:p-4 flex justify-end gap-3 z-20">
+                <button type="button" onclick="window.closeListingModal()" class="px-3 py-1.5 md:px-4 md:py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 font-medium" data-i18n="btn_cancel">Hủy</button>
+                <button type="submit" id="btn-save-listing" class="px-4 py-1.5 md:px-6 md:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md font-medium" data-i18n="btn_save">Lưu</button>
+            </div>
+        </form>
+        <div id="modal-resize-handle" class="resizer hidden md:block"></div>
+    `;
+
+    // Re-initialize internal listeners since HTML was replaced
+    const btnAddMaterial = document.getElementById('btn-add-material');
+    if (btnAddMaterial) btnAddMaterial.addEventListener('click', addMaterialRow);
+    const fileInput = document.getElementById('file-upload-input');
+    if(fileInput) fileInput.addEventListener('change', (e) => handleFileUpload(e.target.files));
+    const hospitalInput = document.getElementById('l-benh-vien');
+    if (hospitalInput) hospitalInput.addEventListener('input', generateMaThau);
+    
+    // Add NPP "+" button listener
+    const btnAddNpp = document.getElementById('btn-add-npp');
+    if (btnAddNpp) {
+        btnAddNpp.onclick = () => {
+            const input = document.getElementById('l-npp');
+            input.value = '';
+            input.focus();
+            // Close dropdown if open
+            const list = document.getElementById('list-npp');
+            if(list) list.classList.remove('show');
+        };
+    }
+
+    // --- Data Fetching ---
+    await fetchAuxiliaryData();
+
+    // --- Init Variables ---
     const form = document.getElementById('listing-form');
     const title = document.getElementById('listing-modal-title');
     const btnSave = document.getElementById('btn-save-listing');
-    const fileContainer = document.getElementById('file-list-container');
     const btnUploadLabel = document.getElementById('btn-upload-label');
-    const btnAddMaterial = document.getElementById('btn-add-material');
     
     isReadOnlyMode = readOnly;
     form.reset();
-    fileContainer.innerHTML = '';
+    document.getElementById('file-list-container').innerHTML = '';
     currentFiles = [];
     currentMaterials = [];
     originalMaThau = null;
     
-    // Load latest data for autocompletes from window cache
+    // Setup Autocompletes
     if (window.getListingsCache) {
         setupAutocompletes(window.getListingsCache());
     }
 
+    // --- Populate Data ---
     if (item) {
         title.textContent = readOnly ? t('nav_detail') : (isPreFill ? t('modal_add_title') : t('modal_edit_title'));
         
-        // ID Handling
         if (!isPreFill) {
             document.getElementById('listing-id').value = item.id || item.ma_thau;
             originalMaThau = item.ma_thau; 
@@ -204,10 +444,10 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
             originalMaThau = null;
         }
         
-        // Fill Fields
         document.getElementById('l-ma-thau').value = item.ma_thau || '';
         document.getElementById('l-nam').value = item.nam || new Date().getFullYear();
         document.getElementById('l-benh-vien').value = item.benh_vien || '';
+        document.getElementById('l-khoa').value = item.khoa || ''; 
         document.getElementById('l-tinh').value = item.tinh || '';
         document.getElementById('l-khu-vuc').value = item.khu_vuc || '';
         document.getElementById('l-loai').value = item.loai || '';
@@ -218,9 +458,8 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
         document.getElementById('l-nganh').value = item.nganh || '';
         document.getElementById('l-psr').value = item.psr || '';
         document.getElementById('l-quan-ly').value = item.quan_ly || '';
-        document.getElementById('l-status').value = item.tinh_trang || 'Waiting';
+        document.getElementById('l-status').value = item.tinh_trang || 'Listing';
         
-        // Files (Only for existing items)
         try {
              if(item.files && !isPreFill) {
                  const files = typeof item.files === 'string' ? JSON.parse(item.files) : (item.files || []);
@@ -229,7 +468,6 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
              }
         } catch(e) { console.error(e); }
 
-        // Materials Logic
         if (!isPreFill && item.ma_thau) {
             showLoading(true);
             const { data, error } = await sb.from('detail').select('ma_vt, quota, sl_trung').eq('ma_thau', item.ma_thau);
@@ -238,7 +476,6 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
                 currentMaterials = data;
             }
         } else if (isPreFill && item.details) {
-            // AI returns details array
             currentMaterials = item.details.map(d => ({
                 ma_vt: d.ma_vt || '',
                 quota: d.quota || 0,
@@ -250,17 +487,34 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
         // Fresh Add
         title.textContent = t('modal_add_title');
         document.getElementById('listing-id').value = '';
-        const status = document.querySelector('.mobile-tab-btn.bg-blue-100')?.dataset.status || 'Waiting';
-        document.getElementById('l-status').value = status; 
+        document.getElementById('l-status').value = 'Listing'; // Default status Listing
         
         const now = new Date();
         document.getElementById('l-nam').value = now.getFullYear();
         document.getElementById('l-ngay').value = now.toISOString().split('T')[0];
     }
 
+    // --- PSR Logic Handling ---
+    const psrInput = document.getElementById('l-psr');
+    const psrContainer = document.getElementById('psr-container');
+
+    if (currentUser.phan_quyen === 'View') {
+        // Nếu là View: Auto fill tên và ẩn container
+        psrInput.value = currentUser.ho_ten;
+        if(psrContainer) psrContainer.classList.add('hidden');
+    } else {
+        // Admin hoặc User
+        if (!item && !isPreFill) { 
+            // Nếu là form Thêm mới tinh: Auto fill tên
+            psrInput.value = currentUser.ho_ten;
+        }
+        // Hiển thị để sửa
+        if(psrContainer) psrContainer.classList.remove('hidden');
+    }
+    // ---------------------------
+
     renderMaterialList(readOnly);
 
-    // UI State (ReadOnly vs Edit)
     if (readOnly) {
         Array.from(form.elements).forEach(el => el.disabled = true);
         btnSave.classList.add('hidden');
@@ -271,6 +525,7 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
         btnSave.classList.remove('hidden');
         btnUploadLabel.classList.remove('hidden');
         if(btnAddMaterial) btnAddMaterial.classList.remove('hidden');
+        document.getElementById('l-khu-vuc').disabled = true; // Khu vuc always readonly as it auto-fills
     }
 
     initialFormState = getFormState();
@@ -285,7 +540,6 @@ export async function closeListingModal(force = false) {
             if (!confirmed) return;
         }
     }
-    
     document.getElementById('listing-modal').classList.add('hidden');
     document.getElementById('history-modal').classList.add('hidden');
 }
@@ -298,6 +552,7 @@ export async function saveListing(e) {
         ma_thau: document.getElementById('l-ma-thau').value,
         nam: document.getElementById('l-nam').value || null,
         benh_vien: document.getElementById('l-benh-vien').value,
+        khoa: document.getElementById('l-khoa').value,
         tinh: document.getElementById('l-tinh').value,
         khu_vuc: document.getElementById('l-khu-vuc').value,
         loai: document.getElementById('l-loai').value,
@@ -317,27 +572,22 @@ export async function saveListing(e) {
     let oldListing = null;
     let oldDetails = [];
 
-    // --- History Tracking ---
     if (originalMaThau) {
         actionType = "Cập nhật";
         
-        // Fetch OLD data
         const { data: listingData } = await sb.from('listing').select('*').eq('ma_thau', originalMaThau).single();
         const { data: detailData } = await sb.from('detail').select('ma_vt, quota, sl_trung').eq('ma_thau', originalMaThau);
         
         oldListing = listingData;
         oldDetails = detailData || [];
 
-        // Compare Basic Fields
         const fields = {
             benh_vien: t('lbl_hospital'),
+            khoa: t('lbl_department'),
             tinh: t('lbl_province'),
             khu_vuc: t('lbl_area'),
             nha_phan_phoi: t('lbl_distributor'),
             loai: t('lbl_type'),
-            ngay: t('lbl_date_created'),
-            ngay_ky: t('lbl_signed_date'),
-            ngay_ket_thuc: t('lbl_end_date'),
             nganh: t('lbl_sector'),
             psr: t('lbl_psr'),
             quan_ly: t('lbl_manager'),
@@ -355,7 +605,6 @@ export async function saveListing(e) {
             }
         }
 
-        // Compare Materials
         const oldMatMap = new Map();
         oldDetails.forEach(d => oldMatMap.set(d.ma_vt, d));
 
@@ -385,15 +634,12 @@ export async function saveListing(e) {
         changeLog.push(`Tạo mới thầu với ${currentMaterials.length} mã vật tư.`);
     }
 
-    // --- Save Logic ---
     let error;
 
     if (originalMaThau) {
-        // Update
         const { error: err } = await sb.from('listing').update(formData).eq('ma_thau', originalMaThau); 
         error = err;
     } else {
-        // Insert
         const { error: err } = await sb.from('listing').insert(formData);
         error = err;
     }
@@ -404,7 +650,6 @@ export async function saveListing(e) {
         return;
     }
 
-    // Sync Details: Delete all old, Insert new
     const targetMaThauToDelete = originalMaThau || formData.ma_thau;
     const { error: delError } = await sb.from('detail').delete().eq('ma_thau', targetMaThauToDelete);
     
@@ -419,6 +664,7 @@ export async function saveListing(e) {
                 ma_thau: formData.ma_thau,
                 nam: formData.nam,
                 benh_vien: formData.benh_vien,
+                khoa: formData.khoa,
                 tinh: formData.tinh,
                 khu_vuc: formData.khu_vuc,
                 nha_phan_phoi: formData.nha_phan_phoi,
@@ -442,12 +688,10 @@ export async function saveListing(e) {
         }
     }
     
-    // Log History
     if (changeLog.length > 0) {
         await logHistory(formData.ma_thau, actionType, changeLog.join('\n'));
     }
     
-    // Notification for Manual Creation - Use window global instead of imported function
     if (!originalMaThau && window.notifyAdmins) {
          await window.notifyAdmins(
             'Hồ sơ mới (Thủ công)', 
@@ -458,8 +702,7 @@ export async function saveListing(e) {
 
     showLoading(false);
     showToast(t('msg_update_success'), 'success');
-    closeListingModal(true); // Close without confirmation
-    // Refresh parent view via global
+    closeListingModal(true); 
     if (window.fetchListings) await window.fetchListings();
 }
 

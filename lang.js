@@ -1,6 +1,7 @@
 
 
 
+
 export const translations = {
     vi: {
         // Login Screen
@@ -92,6 +93,7 @@ export const translations = {
         perm_desc: "Cấp quyền chi tiết cho từng chức năng",
 
         // Listing / Kanban
+        col_listing: "Listing (Mới)",
         col_waiting: "Waiting (Chờ)",
         col_win: "Win (Thắng thầu)",
         col_fail: "Fail (Trượt thầu)",
@@ -100,6 +102,7 @@ export const translations = {
         lbl_contract_duration: "Thời hạn hợp đồng",
         msg_update_success: "Cập nhật thành công",
         msg_delete_success: "Xóa thành công",
+        msg_copy_success: "Đã sao chép mã thầu",
         modal_add_title: "Thêm Mới Thầu",
         modal_edit_title: "Cập Nhật Thầu",
 
@@ -107,6 +110,7 @@ export const translations = {
         lbl_code: "Mã",
         lbl_year: "Năm",
         lbl_hospital: "Bệnh viện",
+        lbl_department: "Khoa",
         lbl_province: "Tỉnh",
         lbl_area: "Khu vực",
         lbl_distributor: "NPP",
@@ -117,12 +121,14 @@ export const translations = {
         lbl_manager: "Quản lý",
         lbl_signed_date: "Ngày ký",
         lbl_end_date: "Ngày KT",
+        lbl_expiration: "Ngày hết hạn",
 
         // Detail View Columns (New)
         dt_stt: "STT",
         dt_ma_thau: "Tender Code",
         dt_nam: "Năm",
         dt_benh_vien: "Bệnh Viện",
+        dt_department: "Khoa",
         dt_tinh: "Tỉnh",
         dt_khu_vuc: "Khu Vực",
         dt_npp: "Nhà Phân Phối",
@@ -140,6 +146,7 @@ export const translations = {
         dt_group_product: "Nhóm SP",
         
         // Detail View Footer & Stats
+        dt_stat_listing: "Listing",
         dt_stat_quota: "Quota",
         dt_stat_waiting: "Waiting",
         dt_stat_win: "Win (Trúng)",
@@ -207,6 +214,15 @@ export const translations = {
         opt_month: "Tháng này",
         opt_quarter: "Quý này",
         opt_year: "Năm nay",
+        opt_custom_range: "Tùy chọn",
+        
+        // Expiration Presets
+        opt_exp_7: "7 ngày tới",
+        opt_exp_15: "15 ngày tới",
+        opt_exp_30: "30 ngày tới",
+        opt_exp_45: "45 ngày tới",
+        opt_exp_90: "90 ngày tới",
+        opt_exp_120: "120 ngày tới",
 
         // Messages
         confirm_view_product: "Bạn muốn xem sản phẩm này?",
@@ -326,6 +342,7 @@ export const translations = {
         perm_desc: "Grant detailed permissions for each feature",
 
         // Listing / Kanban
+        col_listing: "Listing",
         col_waiting: "Waiting",
         col_win: "Win",
         col_fail: "Fail",
@@ -334,6 +351,7 @@ export const translations = {
         lbl_contract_duration: "Contract Duration",
         msg_update_success: "Update successful",
         msg_delete_success: "Deleted successfully",
+        msg_copy_success: "Code copied to clipboard",
         modal_add_title: "Add New Listing",
         modal_edit_title: "Edit Listing",
 
@@ -341,6 +359,7 @@ export const translations = {
         lbl_code: "Code",
         lbl_year: "Year",
         lbl_hospital: "Hospital",
+        lbl_department: "Dept",
         lbl_province: "Province",
         lbl_area: "Regional", 
         lbl_distributor: "Distributor",
@@ -351,12 +370,14 @@ export const translations = {
         lbl_manager: "Manager",
         lbl_signed_date: "Signed",
         lbl_end_date: "End Date",
+        lbl_expiration: "Expiration",
 
         // Detail View Columns (New)
         dt_stt: "No.",
         dt_ma_thau: "Tender Code",
         dt_nam: "Year",
         dt_benh_vien: "Hospital",
+        dt_department: "Dept",
         dt_tinh: "Province",
         dt_khu_vuc: "Region",
         dt_npp: "Distributor",
@@ -374,6 +395,7 @@ export const translations = {
         dt_group_product: "Product Group",
         
         // Detail View Footer & Stats
+        dt_stat_listing: "Listing",
         dt_stat_quota: "Quota",
         dt_stat_waiting: "Waiting",
         dt_stat_win: "Win",
@@ -441,6 +463,15 @@ export const translations = {
         opt_month: "This Month",
         opt_quarter: "This Quarter",
         opt_year: "This Year",
+        opt_custom_range: "Custom",
+
+        // Expiration Presets
+        opt_exp_7: "Next 7 days",
+        opt_exp_15: "Next 15 days",
+        opt_exp_30: "Next 30 days",
+        opt_exp_45: "Next 45 days",
+        opt_exp_90: "Next 90 days",
+        opt_exp_120: "Next 120 days",
 
         // Messages
         confirm_view_product: "Do you want to view this product?",
