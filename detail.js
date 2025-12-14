@@ -1,6 +1,3 @@
-
-
-
 import { sb, showToast, showLoading, currentUser } from './app.js';
 import { translations, getCurrentLanguage, setLanguage } from './lang.js';
 
@@ -66,7 +63,7 @@ const BASE_COLUMNS = [
 let columnSettings = [];
 let savedSortConfig = undefined; // Store saved sort state
 
-export async function onShowDetailView() {
+export function onShowDetailView() {
     const container = document.getElementById('view-chi-tiet');
     
     // check export permission
@@ -81,6 +78,18 @@ export async function onShowDetailView() {
          }
     }
     const canExport = exportPermissions.includes('view-chi-tiet');
+
+    // If grid container exists, just refresh and return for instant view switch
+    if (container.querySelector('#hot-container')) {
+        // Trigger resize observer to fix Handsontable layout in tabs
+        setTimeout(() => {
+            if(hot) hot.refreshDimensions();
+        }, 50); // slight delay to ensure layout is visible
+        
+        // Background refresh
+        fetchDetailData(true);
+        return;
+    }
 
     // Inject Structure
     // HYBRID LAYOUT: 
@@ -276,34 +285,29 @@ export async function onShowDetailView() {
 
     loadUserSettings(); 
 
-    // PERFORMANCE: If already loaded, init UI with cache, then silent fetch
-    if(isDetailLoaded) {
-        initHandsontable();
-        updateTableData();
-        setupToolbarListeners();
-        setupColumnManager();
-        setupExportListeners();
-        setupDateFilterModal(); 
-        fetchDetailData(true); 
-        
-        const resizeObserver = new ResizeObserver(() => {
-            if(hot) hot.refreshDimensions();
-        });
-        resizeObserver.observe(document.getElementById('hot-container'));
+    // Initialize Handsontable immediately with empty data if needed
+    initHandsontable();
+    updateTableData();
+    setupToolbarListeners();
+    setupColumnManager();
+    setupExportListeners();
+    setupDateFilterModal();
+    
+    // Resize Observer to handle layout changes
+    const resizeObserver = new ResizeObserver(() => {
+        if(hot) hot.refreshDimensions();
+    });
+    resizeObserver.observe(document.getElementById('hot-container'));
+
+    // PERFORMANCE: Background fetch
+    // If cache exists, data is already shown by updateTableData above (via allData global).
+    // If not, fetch in background.
+    if (!isDetailLoaded) {
+        // Do not await to prevent blocking UI switch
+        fetchDetailData(false); 
     } else {
-        await fetchDetailData(false); 
-        
-        initHandsontable();
-        updateTableData();
-        setupToolbarListeners();
-        setupColumnManager();
-        setupExportListeners();
-        setupDateFilterModal();
-        
-        const resizeObserver = new ResizeObserver(() => {
-            if(hot) hot.refreshDimensions();
-        });
-        resizeObserver.observe(document.getElementById('hot-container'));
+        // Silent refresh
+        fetchDetailData(true);
     }
 
     if(!detailRealtimeChannel) {

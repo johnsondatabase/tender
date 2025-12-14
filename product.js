@@ -1,6 +1,3 @@
-
-
-
 import { sb, showToast, showLoading, showConfirm, currentUser, sanitizeFileName, showView } from './app.js';
 import { translations, getCurrentLanguage, setLanguage } from './lang.js';
 
@@ -134,7 +131,7 @@ function handleProductEscKey(e) {
     }
 }
 
-export async function onShowProductView(params = null) {
+export function onShowProductView(params = null) {
     const container = document.getElementById('view-san-pham');
     
     // Handle Incoming Params (e.g. from Detail View)
@@ -154,6 +151,11 @@ export async function onShowProductView(params = null) {
         // Update button text states if needed
         updateFilterButtonState();
         
+        // Trigger resize observer to fix Handsontable layout in tabs
+        setTimeout(() => {
+            if(hot) hot.refreshDimensions();
+        }, 50); // slight delay to ensure layout is visible
+
         // If we have a forced filter from params, apply it
         if (params && params.filterCode) {
             filterData(savedSearchKeyword);
@@ -413,17 +415,10 @@ export async function onShowProductView(params = null) {
     document.removeEventListener('keydown', handleProductEscKey);
     document.addEventListener('keydown', handleProductEscKey);
 
-    const initCore = async (silent) => {
-        await fetchProductData(silent);
-        
-        if (savedSearchKeyword) {
-            const searchInput = document.getElementById('product-search');
-            if (searchInput) searchInput.value = savedSearchKeyword;
-            filterData(savedSearchKeyword);
-        }
-
+    const initCore = (silent) => {
+        // Init table structure first (empty or with cached data)
         initHandsontable();
-        updateTableData(); // Loads ALL data (No pagination)
+        updateTableData(); 
         setupToolbarListeners();
         setupExportListeners();
         setupImageModalListeners(); 
@@ -433,6 +428,15 @@ export async function onShowProductView(params = null) {
             if(hot) hot.refreshDimensions();
         });
         resizeObserver.observe(document.getElementById('hot-product-container'));
+
+        if (savedSearchKeyword) {
+            const searchInput = document.getElementById('product-search');
+            if (searchInput) searchInput.value = savedSearchKeyword;
+            filterData(savedSearchKeyword);
+        }
+
+        // Fetch in background (non-blocking)
+        fetchProductData(silent);
     };
 
     if(isProductLoaded) {

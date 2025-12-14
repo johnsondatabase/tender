@@ -1,6 +1,3 @@
-
-
-
 import { setLanguage, getCurrentLanguage } from './lang.js';
 import { initChatbot } from './chatbot.js';
 
@@ -266,27 +263,32 @@ export async function showView(viewId, params = null) {
 
     currentView = viewId;
 
-    try {
-        if (viewId === 'view-cai-dat') {
-            const { onShowCaiDatView } = await import('./caidat.js');
-            await onShowCaiDatView();
-        } else if (viewId === 'view-ton-kho') {
-            const { onShowListingView } = await import('./listing.js');
-            await onShowListingView();
-        } else if (viewId === 'view-chi-tiet') {
-            const { onShowDetailView } = await import('./detail.js');
-            await onShowDetailView(params);
-        } else if (viewId === 'view-san-pham') {
-            const { onShowProductView } = await import('./product.js');
-            await onShowProductView(params);
-        } else if (viewId === 'view-phat-trien') {
-            const { onShowDashboardView } = await import('./dashboard.js');
-            await onShowDashboardView();
+    // OPTIMIZATION: Do NOT await the module execution.
+    // Allow the UI to switch immediately, then load data in the background.
+    // Using setTimeout to push execution to next event loop tick to allow UI repaint.
+    setTimeout(async () => {
+        try {
+            if (viewId === 'view-cai-dat') {
+                const { onShowCaiDatView } = await import('./caidat.js');
+                onShowCaiDatView();
+            } else if (viewId === 'view-ton-kho') {
+                const { onShowListingView } = await import('./listing.js');
+                onShowListingView();
+            } else if (viewId === 'view-chi-tiet') {
+                const { onShowDetailView } = await import('./detail.js');
+                onShowDetailView(params);
+            } else if (viewId === 'view-san-pham') {
+                const { onShowProductView } = await import('./product.js');
+                onShowProductView(params);
+            } else if (viewId === 'view-phat-trien') {
+                const { onShowDashboardView } = await import('./dashboard.js');
+                onShowDashboardView();
+            }
+        } catch (error) {
+            console.error(error);
+            showToast("Lỗi tải module: " + error.message, 'error');
         }
-    } catch (error) {
-        console.error(error);
-        showToast("Lỗi tải giao diện: " + error.message, 'error');
-    }
+    }, 0);
 }
 
 function updateOnlineStatusUI() {
@@ -346,7 +348,6 @@ let notifications = [];
 let contextMenuTargetId = null;
 
 function playNotificationSound() {
-    // Simple beep sound using AudioContext for broader compatibility
     try {
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         if (AudioContext) {
@@ -380,10 +381,8 @@ function formatNotificationTime(isoString) {
                     date.getFullYear() === now.getFullYear();
     
     if (isToday) {
-        // Only show time
         return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } else {
-        // Show time and full date
         const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const dateStr = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth()+1).padStart(2, '0')}/${date.getFullYear()}`;
         return `${timeStr} ${dateStr}`;
@@ -396,6 +395,7 @@ async function initNotificationSystem() {
     const btn = document.getElementById('btn-notification');
     const dropdown = document.getElementById('notification-dropdown');
     const markReadBtn = document.getElementById('btn-mark-read-all');
+    const contextMenu = document.getElementById('notification-context-menu');
 
     // 1. Load initial notifications
     await fetchNotifications();
@@ -407,7 +407,7 @@ async function initNotificationSystem() {
                 event: 'INSERT',
                 schema: 'public',
                 table: 'thong_bao',
-                filter: `gui_den_gmail=eq.${currentUser.gmail}` // Filter by current user's email
+                filter: `gui_den_gmail=eq.${currentUser.gmail}`
             }, payload => {
                 handleNewNotification(payload.new);
             })
@@ -418,15 +418,27 @@ async function initNotificationSystem() {
     btn.addEventListener('click', (e) => {
         e.stopPropagation();
         dropdown.classList.toggle('hidden');
+        hideContextMenu(); // Close context menu if open
     });
 
     // Close dropdown when clicking outside
     document.addEventListener('click', (e) => {
-        if (!dropdown.classList.contains('hidden') && !dropdown.contains(e.target) && !btn.contains(e.target)) {
+        const isClickInsideDropdown = dropdown.contains(e.target);
+        const isClickOnBell = btn.contains(e.target);
+        const isClickInsideContextMenu = contextMenu && contextMenu.contains(e.target);
+
+        // Close Main Dropdown if clicked outside: Dropdown, Bell, AND Context Menu
+        if (!dropdown.classList.contains('hidden') && 
+            !isClickInsideDropdown && 
+            !isClickOnBell && 
+            !isClickInsideContextMenu) {
             dropdown.classList.add('hidden');
         }
-        // Also close context menu
-        hideContextMenu();
+
+        // Close Context Menu if clicked outside Context Menu
+        if (contextMenu && !contextMenu.classList.contains('hidden') && !isClickInsideContextMenu) {
+            hideContextMenu();
+        }
     });
 
     // 4. Mark all as read action
@@ -439,12 +451,14 @@ async function initNotificationSystem() {
     const ctxMarkUnread = document.getElementById('ctx-mark-unread');
     const ctxDelete = document.getElementById('ctx-delete');
     
-    if(ctxMarkUnread) ctxMarkUnread.onclick = () => {
+    if(ctxMarkUnread) ctxMarkUnread.onclick = (e) => {
+        e.stopPropagation(); // Stop bubbling to document click
         if(contextMenuTargetId) markAsUnread(contextMenuTargetId);
         hideContextMenu();
     };
     
-    if(ctxDelete) ctxDelete.onclick = () => {
+    if(ctxDelete) ctxDelete.onclick = (e) => {
+        e.stopPropagation(); // Stop bubbling to document click
         if(contextMenuTargetId) deleteNotification(contextMenuTargetId);
         hideContextMenu();
     };
@@ -461,7 +475,6 @@ async function fetchNotifications() {
 
         if (!error) {
             if (data.length === 0) {
-                // ... (Auto-welcome logic unchanged) ...
                 const welcomeMsg = {
                     gui_den_gmail: currentUser.gmail,
                     tieu_de: "Chào mừng bạn!",
@@ -489,7 +502,7 @@ async function fetchNotifications() {
 function handleNewNotification(newNotif) {
     notifications.unshift(newNotif);
     updateNotificationUI();
-    playNotificationSound(); // Play sound only, no toast
+    playNotificationSound();
 }
 
 function updateNotificationUI() {
@@ -514,7 +527,6 @@ function updateNotificationUI() {
         const bgClass = notif.da_xem ? 'bg-white dark:bg-gray-800' : 'bg-blue-50 dark:bg-gray-700/50';
         const iconColor = notif.loai === 'error' ? 'text-red-500' : (notif.loai === 'success' ? 'text-green-500' : 'text-blue-500');
         
-        // Use new time formatter
         const timeStr = formatNotificationTime(notif.ngay_tao);
         
         const isApproval = notif.loai === 'admin_approval';

@@ -1,6 +1,3 @@
-
-
-
 import { sb, showToast, showLoading, showConfirm, currentUser } from './app.js';
 import { translations, getCurrentLanguage } from './lang.js';
 import { logHistory, viewListingHistory } from './lichsu.js';
@@ -61,31 +58,40 @@ export async function notifyAdmins(title, content, actionData = null, type = 'in
 }
 
 // --- Main Init ---
-export async function onShowListingView() {
+export function onShowListingView() {
     const container = document.getElementById('view-ton-kho');
     
-    if (!container.querySelector('#kanban-board')) {
-        container.innerHTML = getListingViewHTML(); 
-        
-        setupFilterListeners();
-        ListingWin.initWinSystem(fetchListings);
-        
-        ListingUI.initUI({
-            onDelete: deleteListing,
-            onUpdateStatus: updateListingStatus,
-            onOpenModal: ListingModal.openListingModal
-        });
-
-        setupDOMListeners();
-    } else {
+    // Check if board already exists. If yes, return immediately for instant switching.
+    if (container.querySelector('#kanban-board')) {
+        // Just refresh translations headers if needed
         Object.keys(ListingUI.COLUMNS).forEach(status => {
             const colHeader = document.querySelector(`#col-wrapper-${status} span[data-i18n]`);
             if(colHeader) colHeader.textContent = t(ListingUI.COLUMNS[status].labelKey);
         });
         const searchInput = document.getElementById('listing-search');
         if(searchInput) searchInput.placeholder = t('search_placeholder');
+        
+        // Re-apply filters to ensure board is consistent
         applyFilters();
+        
+        // Perform silent background update
+        fetchListings(true);
+        return; 
     }
+
+    // First time load: Inject HTML
+    container.innerHTML = getListingViewHTML(); 
+    
+    setupFilterListeners();
+    ListingWin.initWinSystem(fetchListings);
+    
+    ListingUI.initUI({
+        onDelete: deleteListing,
+        onUpdateStatus: updateListingStatus,
+        onOpenModal: ListingModal.openListingModal
+    });
+
+    setupDOMListeners();
 
     if (!realtimeChannel) {
         realtimeChannel = sb.channel('public:listing_changes')
@@ -98,7 +104,8 @@ export async function onShowListingView() {
         applyFilters();
         fetchListings(true);
     } else {
-        await fetchListings(false);
+        // Initial fetch - do not await here to block UI
+        fetchListings(false);
     }
 }
 
@@ -148,8 +155,6 @@ function setupDOMListeners() {
     const hospitalInput = document.getElementById('l-benh-vien');
     if (dateInput) dateInput.addEventListener('change', ListingModal.generateMaThau);
     if (hospitalInput) hospitalInput.addEventListener('input', ListingModal.generateMaThau);
-
-    // Draggable Modal logic is now handled inside listing-form.js to survive DOM re-writes
 
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.multi-select-container')) {
