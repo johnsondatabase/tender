@@ -239,7 +239,7 @@ export async function onShowDashboardView() {
                 <!-- Adjusted Height: Mobile fixed 300px, Desktop fixed 650px (Total Height for balance) -->
                 <div class="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col h-[300px] md:h-[650px]">
                     <div class="flex justify-between items-center mb-4 flex-shrink-0">
-                        <h3 class="text-lg font-bold text-gray-800 dark:text-white">Phân tích Địa bàn</h3>
+                        <h3 class="text-lg font-bold text-gray-800 dark:text-white">Theo Địa bàn</h3>
                         
                         <div class="flex gap-2">
                             <!-- Display Mode Toggle (Number vs %) -->
