@@ -261,10 +261,10 @@ export async function onShowDashboardView() {
                         <div class="min-w-[600px] flex flex-col h-full">
                             <div class="flex items-center text-xs font-bold text-gray-500 dark:text-gray-400 border-b dark:border-gray-700 pb-2 mb-1 pr-2 select-none sticky top-0 bg-white dark:bg-gray-800 z-30">
                                 <div class="flex-1 pl-2">Khu vực / Đơn vị</div>
-                                <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600">L</div>
-                                <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600">W</div>
-                                <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600">Wi</div>
-                                <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600">F</div>
+                                <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Listing (Mới)">L</div>
+                                <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Waiting (Chờ)">W</div>
+                                <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Win (Trúng)">Wi</div>
+                                <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Fail (Trượt)">F</div>
                                 <div class="w-20 text-center border-l border-gray-200 dark:border-gray-600">Tổng</div>
                             </div>
 
@@ -305,10 +305,10 @@ export async function onShowDashboardView() {
                             <div class="min-w-[600px] flex flex-col h-full">
                                 <div class="flex items-center text-xs font-bold text-gray-500 dark:text-gray-400 border-b dark:border-gray-700 pb-2 mb-1 pr-2 select-none sticky top-0 bg-white dark:bg-gray-800 z-30">
                                     <div class="flex-1 pl-2">NPP / <span id="dist-child-label">Chi tiết</span></div>
-                                    <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600">L</div>
-                                    <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600">W</div>
-                                    <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600">Wi</div>
-                                    <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600">F</div>
+                                    <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Listing (Mới)">L</div>
+                                    <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Waiting (Chờ)">W</div>
+                                    <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Win (Trúng)">Wi</div>
+                                    <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Fail (Trượt)">F</div>
                                     <div class="w-20 text-center border-l border-gray-200 dark:border-gray-600">Tổng</div>
                                 </div>
 
@@ -828,6 +828,14 @@ function generateTreeHTML(node, expandedSet, containerId, level = 0, parentPath 
         }
         return a.localeCompare(b);
     });
+
+    // Calculate max Total for current level to normalize bar width
+    let maxTotalInLevel = 0;
+    keys.forEach(k => {
+        const s = node[k]._stats;
+        const t = s.Listing + s.Waiting + s.Win + s.Fail;
+        if(t > maxTotalInLevel) maxTotalInLevel = t;
+    });
     
     keys.forEach(key => {
         const data = node[key];
@@ -840,6 +848,9 @@ function generateTreeHTML(node, expandedSet, containerId, level = 0, parentPath 
         const isExpanded = expandedSet.has(currentPath);
         
         if (total === 0) return;
+
+        // Calculate Data Bar Width
+        const barWidth = maxTotalInLevel > 0 ? (total / maxTotalInLevel) * 100 : 0;
 
         const paddingLeft = level * 16 + 8;
         const toggleIcon = hasChildren 
@@ -926,7 +937,7 @@ function generateTreeHTML(node, expandedSet, containerId, level = 0, parentPath 
             }
         }
 
-        // Increased column width classes: w-12 -> w-16, w-16 -> w-20
+        // Updated Column Widths & Total Column with Bar
         html += `
             <div class="tree-row group ${borderClass} cursor-pointer transition-colors ${expandedClass} ${stickyClass}" data-path="${currentPath}" onclick="${toggleFunc}('${currentPath}')">
                 <div class="flex items-center py-2 pr-2 hover:bg-gray-100 dark:hover:bg-gray-700/50 ${bgClass} ${fontClass}">
@@ -941,7 +952,14 @@ function generateTreeHTML(node, expandedSet, containerId, level = 0, parentPath 
                     <div class="w-16 text-center text-blue-500 border-l border-gray-200 dark:border-gray-600">${fmt(stats.Waiting, 'Waiting')}</div>
                     <div class="w-16 text-center text-green-500 font-bold border-l border-gray-200 dark:border-gray-600">${fmt(stats.Win, 'Win')}</div>
                     <div class="w-16 text-center text-red-500 border-l border-gray-200 dark:border-gray-600">${fmt(stats.Fail, 'Fail')}</div>
-                    <div class="w-20 text-center font-bold text-gray-700 dark:text-gray-300 border-l border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30">${fmt(total, 'Total')}</div>
+                    
+                    <!-- Total Column with Mini Bar -->
+                    <div class="w-20 relative text-center border-l border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30 overflow-hidden h-full flex items-center justify-center">
+                        <!-- Bar Background -->
+                        <div class="absolute inset-y-0 left-0 bg-blue-200 dark:bg-blue-900/40 z-0 transition-all duration-500" style="width: ${barWidth}%"></div>
+                        <!-- Text -->
+                        <span class="relative z-10 font-bold text-gray-700 dark:text-gray-300 text-[10px]">${fmt(total, 'Total')}</span>
+                    </div>
                 </div>
             </div>
         `;
