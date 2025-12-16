@@ -236,8 +236,8 @@ export async function onShowDashboardView() {
             <!-- REGION & HIERARCHY SECTION -->
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <!-- Region Analysis -->
-                <!-- Adjusted Height: Mobile fixed 300px (compact scroll), Desktop fixed 800px (match right side) -->
-                <div class="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col h-[300px] md:h-[800px]">
+                <!-- Adjusted Height: Mobile fixed 300px, Desktop fixed 650px (Total Height for balance) -->
+                <div class="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col h-[300px] md:h-[650px]">
                     <div class="flex justify-between items-center mb-4 flex-shrink-0">
                         <h3 class="text-lg font-bold text-gray-800 dark:text-white">Phân tích Địa bàn</h3>
                         
@@ -259,7 +259,7 @@ export async function onShowDashboardView() {
                     <!-- Headers (Wrapped in overflow-x-auto for mobile) -->
                     <div class="overflow-x-auto custom-scrollbar flex-1 flex flex-col">
                         <div class="min-w-[600px] flex flex-col h-full">
-                            <div class="flex items-center text-xs font-bold text-gray-500 dark:text-gray-400 border-b dark:border-gray-700 pb-2 mb-1 pr-2 select-none">
+                            <div class="flex items-center text-xs font-bold text-gray-500 dark:text-gray-400 border-b dark:border-gray-700 pb-2 mb-1 pr-2 select-none sticky top-0 bg-white dark:bg-gray-800 z-30">
                                 <div class="flex-1 pl-2">Khu vực / Đơn vị</div>
                                 <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600">L</div>
                                 <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600">W</div>
@@ -268,7 +268,7 @@ export async function onShowDashboardView() {
                                 <div class="w-20 text-center border-l border-gray-200 dark:border-gray-600">Tổng</div>
                             </div>
 
-                            <div class="flex-1 overflow-y-auto custom-scrollbar">
+                            <div class="flex-1 overflow-y-auto custom-scrollbar relative">
                                 <div id="hierarchy-tree" class="w-full text-xs"></div>
                             </div>
                         </div>
@@ -276,9 +276,11 @@ export async function onShowDashboardView() {
                 </div>
 
                 <!-- Distributor & Contract Wrapper -->
-                <!-- Desktop height increased to 800px to allow both children to fit without clipping -->
-                <div class="flex flex-col gap-6 h-auto md:h-[800px]">
-                    <div class="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex-1 flex flex-col overflow-hidden min-h-[300px]">
+                <!-- Desktop height set to 650px to match the Left Column -->
+                <div class="flex flex-col gap-4 md:h-[650px]">
+                    <!-- Distributor: Fixed height on mobile (300px), Flex share on Desktop -->
+                    <!-- REMOVED flex-1, added md:flex-1 to uncouple mobile heights -->
+                    <div class="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col overflow-hidden h-[300px] md:h-auto md:flex-1">
                         
                         <div class="flex justify-between items-center mb-4 flex-shrink-0">
                             <h3 class="text-lg font-bold text-gray-800 dark:text-white" data-i18n="dash_distributor_analysis">Nhà Phân Phối</h3>
@@ -301,7 +303,7 @@ export async function onShowDashboardView() {
                         <!-- Header for Distributor (Wrapped for Mobile Scroll) -->
                         <div class="overflow-x-auto custom-scrollbar flex-1 flex flex-col">
                             <div class="min-w-[600px] flex flex-col h-full">
-                                <div class="flex items-center text-xs font-bold text-gray-500 dark:text-gray-400 border-b dark:border-gray-700 pb-2 mb-1 pr-2 select-none">
+                                <div class="flex items-center text-xs font-bold text-gray-500 dark:text-gray-400 border-b dark:border-gray-700 pb-2 mb-1 pr-2 select-none sticky top-0 bg-white dark:bg-gray-800 z-30">
                                     <div class="flex-1 pl-2">NPP / <span id="dist-child-label">Chi tiết</span></div>
                                     <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600">L</div>
                                     <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600">W</div>
@@ -310,15 +312,16 @@ export async function onShowDashboardView() {
                                     <div class="w-20 text-center border-l border-gray-200 dark:border-gray-600">Tổng</div>
                                 </div>
 
-                                <div class="flex-1 overflow-y-auto custom-scrollbar">
+                                <div class="flex-1 overflow-y-auto custom-scrollbar relative">
                                     <div id="distributor-tree" class="w-full text-xs"></div>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Contract Monitoring (Formerly Expiring Contracts) -->
-                    <div class="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex-1 flex flex-col overflow-hidden min-h-[300px]">
+                    <!-- Contract Monitoring: Fixed height on mobile (300px), Flex share on Desktop -->
+                    <!-- REMOVED flex-1, added md:flex-1 to uncouple mobile heights -->
+                    <div class="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col overflow-hidden h-[300px] md:h-auto md:flex-1">
                         <div class="flex justify-between items-center mb-4">
                             <h3 class="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">Theo dõi hợp đồng</h3>
                             <!-- Tabs: Upcoming vs Expired -->
@@ -846,13 +849,18 @@ function generateTreeHTML(node, expandedSet, containerId, level = 0, parentPath 
         // Styling hierarchy based on level (Visual Hierarchy)
         let bgClass = 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400';
         let fontClass = 'text-[10px] font-normal'; // Level 3+
+        let stickyClass = '';
 
         if (level === 0) {
-            bgClass = 'bg-gray-100 dark:bg-gray-800 border-b-2 dark:border-gray-600'; 
+            bgClass = 'bg-gray-100 dark:bg-gray-800 border-b-2 dark:border-gray-600 shadow-sm'; 
             fontClass = 'text-sm font-bold text-gray-800 dark:text-white'; // Root Level
+            // Sticky Level 0 (Top 0)
+            stickyClass = 'sticky top-0 z-30';
         } else if (level === 1) {
-            bgClass = 'bg-white dark:bg-gray-900 border-b dark:border-gray-700';
+            bgClass = 'bg-white dark:bg-gray-900 border-b dark:border-gray-700 shadow-sm';
             fontClass = 'text-xs font-semibold text-gray-700 dark:text-gray-300'; // Level 1
+            // Sticky Level 1 (Just below L0, assuming L0 row height ~38px)
+            stickyClass = 'sticky top-[38px] z-20';
         } else if (level === 2) {
             bgClass = 'bg-white dark:bg-gray-900 border-b dark:border-gray-700';
             fontClass = 'text-[11px] font-medium text-gray-600 dark:text-gray-400'; // Level 2
@@ -920,7 +928,7 @@ function generateTreeHTML(node, expandedSet, containerId, level = 0, parentPath 
 
         // Increased column width classes: w-12 -> w-16, w-16 -> w-20
         html += `
-            <div class="tree-row group ${borderClass} cursor-pointer transition-colors ${expandedClass}" data-path="${currentPath}" onclick="${toggleFunc}('${currentPath}')">
+            <div class="tree-row group ${borderClass} cursor-pointer transition-colors ${expandedClass} ${stickyClass}" data-path="${currentPath}" onclick="${toggleFunc}('${currentPath}')">
                 <div class="flex items-center py-2 pr-2 hover:bg-gray-100 dark:hover:bg-gray-700/50 ${bgClass} ${fontClass}">
                     <div class="flex-1 flex items-center gap-2 overflow-hidden" style="padding-left: ${paddingLeft}px">
                         ${toggleIcon}
