@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -269,6 +270,19 @@
         html.dark .ht_clone_top th { background-color: #374151; }
         html.dark .ht_master tr:nth-of-type(even) > td { background-color: #27303f; }
         
+        /* Handsontable SCROLLING FIXES FOR MOBILE */
+        .handsontable .wtHolder {
+            -webkit-overflow-scrolling: touch; /* Enable native-like scroll momentum */
+            overscroll-behavior: none; /* Prevent scroll chaining */
+        }
+        .handsontable .ht_clone_top,
+        .handsontable .ht_clone_left,
+        .handsontable .ht_clone_top_left_corner {
+            will-change: transform; /* Hint to GPU to prioritize these layers */
+            backface-visibility: hidden; /* Fix flickering */
+            transform: translate3d(0, 0, 0);
+        }
+
         /* Handsontable Dropdown/Filter Menu Dark Mode Overrides */
         html.dark .htMenu, 
         html.dark .htDropdownMenu {
