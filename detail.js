@@ -1,3 +1,4 @@
+
 import { sb, showToast, showLoading, currentUser } from './app.js';
 import { translations, getCurrentLanguage, setLanguage } from './lang.js';
 
@@ -115,21 +116,20 @@ export function onShowDetailView() {
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                 </button>
 
-                <!-- Header Filters Toggle -->
-                <button id="btn-toggle-header-filter" class="flex items-center gap-1 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-xs font-medium text-gray-700 dark:text-gray-200 transition-colors">
-                    <!-- Icon & Text injected via JS -->
+                <!-- Header Filters Toggle (Icon Only) -->
+                <button id="btn-toggle-header-filter" class="flex items-center justify-center w-8 h-8 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-700 dark:text-gray-200 transition-colors" title="Bộ lọc">
+                    <!-- Icon injected via JS -->
                 </button>
 
-                <button id="btn-col-settings" class="ml-2 flex items-center gap-1 px-2 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-xs font-medium text-gray-700 dark:text-gray-200 transition-colors">
+                <!-- Column Settings (Icon Only) -->
+                <button id="btn-col-settings" class="ml-1 flex items-center justify-center w-8 h-8 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-gray-700 dark:text-gray-200 transition-colors" title="Quản lý cột">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 00-2 2"></path></svg>
-                    <span data-i18n="btn_col_manager">Quản lý cột</span>
                 </button>
 
-                <!-- Export Button -->
+                <!-- Export Button (Icon Only) -->
                 <div class="relative ${canExport ? '' : 'hidden'}">
-                    <button id="btn-export-excel" class="ml-2 flex items-center gap-1 px-2 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50 rounded text-xs font-medium transition-colors">
+                    <button id="btn-export-excel" class="ml-1 flex items-center justify-center w-8 h-8 bg-green-50 text-green-700 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50 rounded transition-colors" title="Xuất Excel">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                        <span data-i18n="btn_export">Excel</span>
                     </button>
                     <!-- Dropdown Menu -->
                     <div id="export-dropdown" class="hidden absolute right-0 mt-1 w-40 bg-white dark:bg-gray-700 rounded-md shadow-lg border border-gray-200 dark:border-gray-600 z-[1000]">
@@ -567,6 +567,7 @@ function initHandsontable() {
     const container = document.getElementById('hot-container');
     const userCols = getProcessedColumns();
     let pinnedCount = columnSettings.filter(c => c.isVisible && c.isPinned).length;
+    const isMobile = window.innerWidth < 768;
 
     hot = new Handsontable(container, {
         data: [], 
@@ -593,6 +594,9 @@ function initHandsontable() {
         licenseKey: 'non-commercial-and-evaluation',
         autoWrapRow: true,
         autoWrapCol: true,
+        // Disable selection on mobile to prevent accidental edits/highlighting when scrolling
+        disableVisualSelection: isMobile ? ['current', 'area', 'header'] : false,
+        
         afterColumnResize: (newSize, column) => {
             const visibleCols = columnSettings.filter(c => c.isVisible);
             if (visibleCols[column]) {
@@ -810,7 +814,6 @@ function updateFilterButtonState() {
     if (hasConditions) {
         btn.innerHTML = `
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            <span class="line-through" data-i18n="btn_clear_filter">${t('btn_clear_filter')}</span>
         `;
         btn.classList.remove('bg-gray-100', 'text-gray-700');
         btn.classList.add('bg-red-50', 'text-red-600', 'hover:bg-red-100');
@@ -818,14 +821,12 @@ function updateFilterButtonState() {
     } else if (isVisible) {
         btn.innerHTML = `
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
-            <span data-i18n="btn_hide_filter">${t('btn_hide_filter')}</span>
         `;
         btn.classList.remove('bg-gray-100', 'text-gray-700');
         btn.classList.add('bg-blue-100', 'text-blue-700');
     } else {
         btn.innerHTML = `
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path></svg>
-            <span data-i18n="btn_show_filter">${t('btn_show_filter')}</span>
         `;
     }
 }
