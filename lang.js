@@ -1,9 +1,4 @@
 
-
-
-
-
-
 export const translations = {
     vi: {
         // Login Screen
@@ -48,7 +43,7 @@ export const translations = {
         // Settings Menu
         settings_profile: "Hồ sơ Cá Nhân",
         settings_admin: "Quản Lý Người Dùng",
-        settings_system: "Hệ Thống & Ngôn Ngữ",
+        settings_system: "Hệ Thống & Giao Diện",
         settings_about: "Giới Thiệu",
         settings_support: "Hỗ Trợ",
         
@@ -61,16 +56,33 @@ export const translations = {
         sys_font_desc: "Điều chỉnh kích thước văn bản",
         sys_theme: "Màu chủ đạo",
         sys_theme_desc: "Chọn màu sắc thương hiệu",
+        
+        // User Management (Admin)
+        usr_list_title: "Danh sách tài khoản",
+        usr_status_approved: "Đã Duyệt",
+        usr_status_pending: "Chờ Duyệt",
+        usr_status_locked: "Khóa",
+        btn_unlock: "Mở Khóa",
+        btn_approve: "Duyệt",
+        btn_lock: "Khóa",
+        btn_delete_acc: "Xóa Tài Khoản",
+        btn_reset_pass: "Đặt lại MK",
+        btn_data_config: "Cấu hình Data",
+        msg_no_users: "Không có người dùng nào.",
 
         // Profile
         pro_title: "Hồ sơ của tôi",
         pro_desc: "Quản lý thông tin hồ sơ để bảo mật tài khoản",
         label_old_pass: "Mật khẩu cũ",
         label_new_pass: "Mật khẩu mới",
-        btn_save: "Thay Đổi Thông Tin",
+        label_confirm_password: "Xác nhận MK",
+        btn_save: "Lưu Thay Đổi",
         btn_upload: "Chọn Ảnh",
+        btn_remove_img: "Xóa ảnh",
+        tip_img_format: "Dụng lượng tối đa 1 MB. Định dạng: .JPEG, .PNG",
+        msg_update_profile_success: "Cập nhật thông tin thành công!",
 
-        // Common
+        // Common Buttons & Labels
         status_online: "Đang hoạt động",
         loading: "Đang tải...",
         processing: "Đang xử lý...",
@@ -80,20 +92,61 @@ export const translations = {
         btn_confirm: "Đồng ý",
         btn_add_new: "Thêm Mới",
         btn_apply: "Áp dụng",
-        search_placeholder: "Tìm theo Mã thầu, Bệnh viện...",
+        btn_filter: "Lọc",
+        search_placeholder: "Tìm kiếm...",
+        txt_no_data: "Chưa có dữ liệu",
+        txt_manual_copy: "Đã sao chép thủ công",
+        msg_copy_success: "Đã sao chép",
+        
+        // Common Date Filters
+        lbl_time: "Thời gian:",
+        lbl_custom_opt: "Tùy chọn:",
+        
+        // Dashboard
+        dash_total_listings: "Tổng Hồ Sơ",
+        dash_total_quota: "Tổng Quota",
+        dash_total_win: "Giá Trị Thắng",
+        dash_win_rate: "Tỷ Lệ Thắng",
+        dash_chart_status: "Tỷ Trọng Trạng Thái",
+        dash_chart_monthly: "Xu Hướng Hồ Sơ Mới",
+        dash_distributor_analysis: "Nhà Phân Phối",
+        dash_psr_analysis: "Phân Tích Hiệu Quả PSR",
+        dash_psr_performance: "Hiệu suất PSR (Quota vs Win)",
+        dash_psr_table_title: "Chi tiết theo PSR",
+        dash_monitor_contract: "Theo dõi hợp đồng",
+        dash_expiring_soon: "Sắp hết hạn",
+        dash_expired: "Đã hết hạn",
+        dash_region_analysis: "Theo Địa bàn",
+        
+        // Dashboard Mobile KPI
+        mob_kpi_listings: "Hồ sơ",
+        mob_kpi_quota: "Quota",
+        mob_kpi_win: "Thắng",
+        mob_kpi_rate: "Tỷ lệ",
 
-        // Permissions
-        btn_permission: "Phân quyền",
-        perm_title: "Phân quyền người dùng",
-        perm_view: "Xem",
-        perm_add: "Thêm",
-        perm_edit: "Sửa",
-        perm_delete: "Xóa",
-        perm_import: "Nhập file",
-        perm_export: "Xuất file",
-        perm_screen: "Màn hình",
-        perm_desc: "Cấp quyền chi tiết cho từng chức năng",
-
+        // Product View
+        prod_select: "Chọn",
+        prod_image: "Hình ảnh",
+        prod_ma_vt: "Mã SP",
+        prod_ten_vt: "Tên SP",
+        prod_listing: "Listing", 
+        prod_waiting: "Waiting",
+        prod_win: "Win",
+        prod_fail: "Fail",
+        prod_ch1: "Cấu hình 1",
+        prod_ch2: "Cấu hình 2",
+        prod_nganh: "Ngành",
+        prod_group: "Nhóm SP",
+        btn_delete_selected: "Xóa chọn",
+        btn_download_template: "Tải Mẫu",
+        btn_import: "Import Excel",
+        btn_manual_add: "Thủ Công",
+        modal_img_manager: "Quản lý hình ảnh",
+        modal_img_add: "Thêm ảnh",
+        modal_img_download_all: "Tải xuống tất cả",
+        modal_img_tip: "Mẹo: Bạn có thể dán ảnh trực tiếp (Ctrl+V) vào cửa sổ này. Kéo thả để sắp xếp.",
+        modal_img_empty: "Chưa có hình ảnh. Dán (Ctrl+V) hoặc chọn ảnh để thêm.",
+        
         // Listing / Kanban
         col_listing: "Listing (Mới)",
         col_waiting: "Waiting (Chờ)",
@@ -104,18 +157,17 @@ export const translations = {
         lbl_contract_duration: "Thời hạn hợp đồng",
         msg_update_success: "Cập nhật thành công",
         msg_delete_success: "Xóa thành công",
-        msg_copy_success: "Đã sao chép mã thầu",
         modal_add_title: "Thêm Mới Thầu",
         modal_edit_title: "Cập Nhật Thầu",
 
-        // Listing Fields Labels
+        // Listing Fields
         lbl_code: "Mã",
         lbl_year: "Năm",
         lbl_hospital: "Bệnh viện",
         lbl_department: "Khoa",
         lbl_province: "Tỉnh",
         lbl_area: "Khu vực",
-        lbl_distributor: "NPP",
+        lbl_distributor: "Nhà Phân Phối",
         lbl_date_created: "Ngày tạo",
         lbl_type: "Loại",
         lbl_sector: "Ngành",
@@ -124,10 +176,11 @@ export const translations = {
         lbl_signed_date: "Ngày ký",
         lbl_end_date: "Ngày KT",
         lbl_expiration: "Ngày hết hạn",
+        lbl_attach: "Đính kèm tệp",
+        lbl_material_list: "Danh sách vật tư",
 
-        // Detail View Columns (New)
-        dt_stt: "STT",
-        dt_ma_thau: "Tender Code",
+        // Detail View
+        dt_ma_thau: "Mã Thầu",
         dt_nam: "Năm",
         dt_benh_vien: "Bệnh Viện",
         dt_department: "Khoa",
@@ -147,58 +200,27 @@ export const translations = {
         dt_quan_ly: "Quản Lý",
         dt_group_product: "Nhóm SP",
         
-        // Detail View Footer & Stats
+        // Stats
         dt_stat_listing: "Listing",
         dt_stat_quota: "Quota",
         dt_stat_waiting: "Waiting",
-        dt_stat_win: "Win (Trúng)",
+        dt_stat_win: "Win",
         dt_stat_fail: "Fail",
         dt_stat_partial: "Thua 1 Phần",
         stat_count: "Đếm",
         stat_sum: "Tổng",
         stat_min: "Min",
         stat_max: "Max",
-        txt_rows: "dòng",
-        txt_of: "trên",
-        txt_page: "Trang",
-
-        // Detail Date Filter
+        txt_rows: "Dòng:",
+        
+        // Filter & Sort
         lbl_date_filter_title: "Bộ lọc ngày",
         lbl_custom_range_opt: "Tùy chọn khoảng thời gian:",
         ctx_advanced_date_filter: "Bộ lọc ngày nâng cao",
-
-        // Product View Columns
-        prod_select: "Chọn",
-        prod_image: "Hình ảnh",
-        prod_ma_vt: "Mã SP",
-        prod_ten_vt: "Tên SP",
-        prod_listing: "Listing", // New
-        prod_waiting: "Waiting",
-        prod_win: "Win",
-        prod_fail: "Fail",
-        prod_ch1: "Cấu hình 1",
-        prod_ch2: "Cấu hình 2",
-        prod_nganh: "Ngành",
-        prod_group: "Nhóm SP",
-        btn_delete_selected: "Xóa chọn",
-        btn_download_template: "Tải Mẫu",
-        btn_import: "Nhập Excel",
-        
-        // Detail View Toolbar
-        btn_align_left: "Trái",
-        btn_align_center: "Giữa",
-        btn_align_right: "Phải",
-        btn_wrap: "Xuống dòng",
-        lbl_pagination: "Trang",
         btn_col_manager: "Cột",
-        col_manager_title: "Quản lý hiển thị cột",
-        search_all_cols: "Tìm kiếm tất cả cột...",
-        
-        // Formatting
-        fmt_bold: "In đậm",
-        fmt_italic: "In nghiêng",
-        fmt_text_color: "Màu chữ",
-        fmt_bg_color: "Màu nền",
+        col_manager_title: "Quản lý cột",
+        col_manager_tip: "Kéo thả để sắp xếp. Ghim để đưa lên đầu.",
+        search_all_cols: "Tìm kiếm...",
         
         // Export
         btn_export: "Excel",
@@ -227,33 +249,19 @@ export const translations = {
         opt_exp_90: "90 ngày tới",
         opt_exp_120: "120 ngày tới",
 
-        // Messages
-        confirm_view_product: "Bạn muốn xem sản phẩm này?",
-        confirm_view_tender_detail: "Bạn muốn xem chi tiết tender của sản phẩm này?",
-
-        // Dashboard
-        dash_total_listings: "Tổng Hồ Sơ",
-        dash_total_quota: "Tổng Quota",
-        dash_total_win: "Giá Trị Thắng",
-        dash_win_rate: "Tỷ Lệ Thắng",
-        dash_chart_status: "Tỷ Trọng Trạng Thái",
-        dash_chart_hospital: "Top 5 Bệnh Viện (Quota)",
-        dash_chart_monthly: "Xu Hướng Hồ Sơ Mới",
-        dash_chart_product_group: "Nhóm Sản Phẩm (Win)",
-        dash_subtitle_overview: "Thống kê tổng quan hoạt động kinh doanh",
-        dash_psr_analysis: "Phân Tích Hiệu Quả PSR",
-        dash_psr_performance: "Hiệu suất PSR (Quota vs Win)",
-        dash_psr_table_title: "Chi tiết theo PSR",
-        dash_top_10_products: "Top 10 Sản Phẩm (Quota & Win Rate)",
-        dash_filter_product: "Lọc theo Sản phẩm:",
-        dash_filter_date: "Thời gian:",
-        col_psr: "PSR",
-        col_top_product: "Sản phẩm chủ lực",
+        // Notification
+        notif_hello: "Xin chào",
+        notif_guest: "Khách",
+        notif_today: "Hôm nay",
         
-        // Dashboard New Widgets
-        dash_expiring_title: "Sắp hết hạn (30 ngày)",
-        dt_days_left: "ngày",
-        dt_ngay_kt: "Ngày KT"
+        // Days of week
+        day_sun: "Chủ Nhật",
+        day_mon: "Thứ Hai",
+        day_tue: "Thứ Ba",
+        day_wed: "Thứ Tư",
+        day_thu: "Thứ Năm",
+        day_fri: "Thứ Sáu",
+        day_sat: "Thứ Bảy"
     },
     en: {
         // Login Screen
@@ -292,13 +300,13 @@ export const translations = {
         header_dashboard: "Dashboard",
         header_listing: "Listing",
         header_detail: "Detail",
-        header_product: "Product",
+        header_product: "Products",
         header_setting: "Settings",
 
         // Settings Menu
         settings_profile: "My Profile",
         settings_admin: "User Management",
-        settings_system: "System & Language",
+        settings_system: "System & UI",
         settings_about: "About",
         settings_support: "Support",
 
@@ -311,14 +319,31 @@ export const translations = {
         sys_font_desc: "Adjust text size",
         sys_theme: "Theme Color",
         sys_theme_desc: "Choose brand color",
+        
+        // User Management
+        usr_list_title: "User List",
+        usr_status_approved: "Approved",
+        usr_status_pending: "Pending",
+        usr_status_locked: "Locked",
+        btn_unlock: "Unlock",
+        btn_approve: "Approve",
+        btn_lock: "Lock",
+        btn_delete_acc: "Delete Account",
+        btn_reset_pass: "Reset Password",
+        btn_data_config: "Data Config",
+        msg_no_users: "No users found.",
 
         // Profile
         pro_title: "My Profile",
         pro_desc: "Manage profile information for account security",
         label_old_pass: "Old Password",
         label_new_pass: "New Password",
-        btn_save: "Changes profile",
+        label_confirm_password: "Confirm Password",
+        btn_save: "Save Changes",
         btn_upload: "Upload Photo",
+        btn_remove_img: "Remove Photo",
+        tip_img_format: "Max size 1 MB. Format: .JPEG, .PNG",
+        msg_update_profile_success: "Profile updated successfully!",
 
         // Common
         status_online: "Online",
@@ -330,19 +355,60 @@ export const translations = {
         btn_confirm: "Confirm",
         btn_add_new: "Add New",
         btn_apply: "Apply",
-        search_placeholder: "Search by Code, Hospital...",
+        btn_filter: "Filter",
+        search_placeholder: "Search...",
+        txt_no_data: "No data available",
+        txt_manual_copy: "Copied manually",
+        msg_copy_success: "Copied to clipboard",
+        
+        // Common Date Filters
+        lbl_time: "Period:",
+        lbl_custom_opt: "Custom:",
 
-        // Permissions
-        btn_permission: "Permissions",
-        perm_title: "User Permissions",
-        perm_view: "View",
-        perm_add: "Add",
-        perm_edit: "Edit",
-        perm_delete: "Delete",
-        perm_import: "Import",
-        perm_export: "Export",
-        perm_screen: "Screen",
-        perm_desc: "Grant detailed permissions for each feature",
+        // Dashboard
+        dash_total_listings: "Total Listings",
+        dash_total_quota: "Total Quota",
+        dash_total_win: "Won Value",
+        dash_win_rate: "Win Rate",
+        dash_chart_status: "Status Distribution",
+        dash_chart_monthly: "New Listings Trend",
+        dash_distributor_analysis: "Distributors",
+        dash_psr_analysis: "PSR Performance Analysis",
+        dash_psr_performance: "PSR Performance (Quota vs Win)",
+        dash_psr_table_title: "Details by PSR",
+        dash_monitor_contract: "Contract Monitor",
+        dash_expiring_soon: "Expiring Soon",
+        dash_expired: "Expired",
+        dash_region_analysis: "By Region",
+        
+        // Dashboard Mobile KPI
+        mob_kpi_listings: "Listing",
+        mob_kpi_quota: "Quota",
+        mob_kpi_win: "Won",
+        mob_kpi_rate: "Rate",
+
+        // Product View
+        prod_select: "Select",
+        prod_image: "Image",
+        prod_ma_vt: "Code",
+        prod_ten_vt: "Name",
+        prod_listing: "Listing", 
+        prod_waiting: "Waiting",
+        prod_win: "Win",
+        prod_fail: "Fail",
+        prod_ch1: "Config 1",
+        prod_ch2: "Config 2",
+        prod_nganh: "Sector",
+        prod_group: "Group",
+        btn_delete_selected: "Delete Selected",
+        btn_download_template: "Template",
+        btn_import: "Import Excel",
+        btn_manual_add: "Manual",
+        modal_img_manager: "Image Management",
+        modal_img_add: "Add Image",
+        modal_img_download_all: "Download All",
+        modal_img_tip: "Tip: You can paste images (Ctrl+V) directly here. Drag to reorder.",
+        modal_img_empty: "No images yet. Paste (Ctrl+V) or select images to add.",
 
         // Listing / Kanban
         col_listing: "Listing",
@@ -354,7 +420,6 @@ export const translations = {
         lbl_contract_duration: "Contract Duration",
         msg_update_success: "Update successful",
         msg_delete_success: "Deleted successfully",
-        msg_copy_success: "Code copied to clipboard",
         modal_add_title: "Add New Listing",
         modal_edit_title: "Edit Listing",
 
@@ -364,7 +429,7 @@ export const translations = {
         lbl_hospital: "Hospital",
         lbl_department: "Dept",
         lbl_province: "Province",
-        lbl_area: "Regional", 
+        lbl_area: "Region", 
         lbl_distributor: "Distributor",
         lbl_date_created: "Created",
         lbl_type: "Type",
@@ -374,10 +439,11 @@ export const translations = {
         lbl_signed_date: "Signed",
         lbl_end_date: "End Date",
         lbl_expiration: "Expiration",
+        lbl_attach: "Attachments",
+        lbl_material_list: "Material List",
 
-        // Detail View Columns (New)
-        dt_stt: "No.",
-        dt_ma_thau: "Tender Code",
+        // Detail View Columns
+        dt_ma_thau: "Code",
         dt_nam: "Year",
         dt_benh_vien: "Hospital",
         dt_department: "Dept",
@@ -386,7 +452,7 @@ export const translations = {
         dt_npp: "Distributor",
         dt_ngay: "Date",
         dt_loai: "Type",
-        dt_ma_vt: "Product Code",
+        dt_ma_vt: "Prod Code",
         dt_quota: "Quota",
         dt_tinh_trang: "Status",
         dt_sl_trung: "Won Qty",
@@ -395,9 +461,9 @@ export const translations = {
         dt_nganh: "Sector",
         dt_psr: "PSR",
         dt_quan_ly: "Manager",
-        dt_group_product: "Product Group",
+        dt_group_product: "Group",
         
-        // Detail View Footer & Stats
+        // Stats
         dt_stat_listing: "Listing",
         dt_stat_quota: "Quota",
         dt_stat_waiting: "Waiting",
@@ -408,47 +474,16 @@ export const translations = {
         stat_sum: "Sum",
         stat_min: "Min",
         stat_max: "Max",
-        txt_rows: "rows",
-        txt_of: "of",
-        txt_page: "Page",
+        txt_rows: "Rows:",
 
-        // Detail Date Filter
+        // Filter & Sort
         lbl_date_filter_title: "Date Filter",
         lbl_custom_range_opt: "Custom Range:",
         ctx_advanced_date_filter: "Advanced Date Filter",
-        
-        // Product View Columns
-        prod_select: "Select",
-        prod_image: "Image",
-        prod_ma_vt: "Product Code",
-        prod_ten_vt: "Product Name",
-        prod_listing: "Listing", // New
-        prod_waiting: "Waiting",
-        prod_win: "Win",
-        prod_fail: "Fail",
-        prod_ch1: "Config 1",
-        prod_ch2: "Config 2",
-        prod_nganh: "Sector",
-        prod_group: "Product Group",
-        btn_delete_selected: "Delete Selected",
-        btn_download_template: "Template",
-        btn_import: "Import Excel",
-        
-        // Detail View Toolbar
-        btn_align_left: "Left",
-        btn_align_center: "Center",
-        btn_align_right: "Right",
-        btn_wrap: "Wrap Text",
-        lbl_pagination: "Page",
         btn_col_manager: "Columns",
         col_manager_title: "Column Manager",
-        search_all_cols: "Search all columns...",
-        
-        // Formatting
-        fmt_bold: "Bold",
-        fmt_italic: "Italic",
-        fmt_text_color: "Text Color",
-        fmt_bg_color: "Background Color",
+        col_manager_tip: "Drag to reorder. Pin to stick to left.",
+        search_all_cols: "Search...",
         
         // Export
         btn_export: "Excel",
@@ -457,9 +492,9 @@ export const translations = {
 
         // Filter Options
         lbl_filter_title: "Search Filter",
-        btn_hide_filter: "Hide Filter",
+        btn_hide_filter: "Hide",
         btn_show_filter: "Filter",
-        btn_clear_filter: "Clear Filter",
+        btn_clear_filter: "Clear",
         opt_all: "All",
         opt_selected: "Selected",
         opt_today: "Today",
@@ -477,33 +512,19 @@ export const translations = {
         opt_exp_90: "Next 90 days",
         opt_exp_120: "Next 120 days",
 
-        // Messages
-        confirm_view_product: "Do you want to view this product?",
-        confirm_view_tender_detail: "Do you want to see tender details for this product?",
-
-        // Dashboard
-        dash_total_listings: "Total Listings",
-        dash_total_quota: "Total Quota",
-        dash_total_win: "Won Value",
-        dash_win_rate: "Win Rate",
-        dash_chart_status: "Status Distribution",
-        dash_chart_hospital: "Top 5 Hospitals (Quota)",
-        dash_chart_monthly: "New Listing Trends",
-        dash_chart_product_group: "Product Groups (Win)",
-        dash_subtitle_overview: "Business performance overview",
-        dash_psr_analysis: "PSR Analysis",
-        dash_psr_performance: "PSR Performance (Quota vs Win)",
-        dash_psr_table_title: "Details by PSR",
-        dash_top_10_products: "Top 10 Products (Quota & Win Rate)",
-        dash_filter_product: "Filter by Product:",
-        dash_filter_date: "Time Range:",
-        col_psr: "PSR",
-        col_top_product: "Top Product",
-
-        // Dashboard New Widgets
-        dash_expiring_title: "Expiring Soon (30 days)",
-        dt_days_left: "days",
-        dt_ngay_kt: "End Date"
+        // Notification
+        notif_hello: "Hello",
+        notif_guest: "Guest",
+        notif_today: "Today",
+        
+        // Days of week
+        day_sun: "Sunday",
+        day_mon: "Monday",
+        day_tue: "Tuesday",
+        day_wed: "Wednesday",
+        day_thu: "Thursday",
+        day_fri: "Friday",
+        day_sat: "Saturday"
     }
 };
 
@@ -518,9 +539,12 @@ export function setLanguage(lang) {
             if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
                 el.placeholder = translations[lang][key];
             } else {
-                // Handle mixed content (icon + text) carefully if needed, 
-                // but for now assuming text-only containers or spans
-                // Ideally wrap text in span with data-i18n
+                // If element has icon (svg), we want to update ONLY the text node, 
+                // but usually simpler to wrap text in span. 
+                // If innerHTML is just text, replace it. 
+                // If it has children, look for a span or text node? 
+                // Current approach in app: most elements are simple.
+                // For complex buttons (Icon + Text), we wrap text in span with data-i18n.
                 el.textContent = translations[lang][key];
             }
         }
@@ -538,7 +562,6 @@ export function getCurrentLanguage() {
 }
 
 function updateFlagActiveState(lang) {
-    // Logic to highlight selected flag
     document.querySelectorAll('.lang-flag').forEach(btn => {
         if (btn.dataset.lang === lang) {
             btn.classList.add('ring-2', 'ring-offset-2', 'ring-primary', 'scale-110');

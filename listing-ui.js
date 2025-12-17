@@ -1,13 +1,9 @@
 
-
-
-
-
 import { translations, getCurrentLanguage } from './lang.js';
 import { viewListingHistory } from './lichsu.js';
 import { checkPermission } from './listing.js';
 import * as ListingWin from './listing-win.js';
-import { showToast } from './app.js'; // Import showToast
+import { showToast } from './app.js'; 
 
 const t = (key) => {
     const lang = getCurrentLanguage();
@@ -199,14 +195,14 @@ function createCard(item) {
         <div class="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-gray-800/90 rounded shadow-sm backdrop-blur-sm p-0.5 z-10 border dark:border-gray-600">
             <button class="btn-action-view p-1 rounded hover:bg-indigo-100 text-indigo-600 dark:hover:bg-indigo-900 dark:text-indigo-400 transition-colors" title="${t('perm_view')}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 0 1 6 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg></button> 
             
-            ${canEdit && isListingStatus ? `<button class="btn-action-submit p-1 rounded hover:bg-blue-100 text-blue-600 dark:hover:bg-blue-900 dark:text-blue-400 transition-colors" title="Nộp thầu (Chuyển sang Waiting)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></button>` : ''}
+            ${canEdit && isListingStatus ? `<button class="btn-action-submit p-1 rounded hover:bg-blue-100 text-blue-600 dark:hover:bg-blue-900 dark:text-blue-400 transition-colors" title="Nộp thầu"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg></button>` : ''}
 
             ${canEdit && !isListingStatus && item.tinh_trang !== 'Win' ? `<button class="btn-action-win p-1 rounded hover:bg-green-100 text-green-600 dark:hover:bg-green-900 dark:text-green-400 transition-colors" title="${t('col_win')}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg></button>` : ''}
             ${canEdit && !isListingStatus && item.tinh_trang !== 'Fail' ? `<button class="btn-action-fail p-1 rounded hover:bg-red-100 text-red-600 dark:hover:bg-red-900 dark:text-red-400 transition-colors" title="${t('col_fail')}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>` : ''}
             
             ${canEdit ? `<button class="btn-action-edit p-1 rounded hover:bg-blue-100 text-blue-600 dark:hover:bg-blue-900 dark:text-blue-400 transition-colors" title="${t('perm_edit')}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg></button>` : ''}
-            <button class="btn-action-history p-1 rounded hover:bg-yellow-100 text-yellow-600 dark:hover:bg-yellow-900 dark:text-yellow-400 transition-colors" title="Xem lịch sử"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>
-            ${canDelete && item.tinh_trang === 'Fail' ? `<button class="btn-action-delete p-1 rounded hover:bg-gray-200 text-gray-500 dark:hover:bg-gray-600 dark:text-gray-400 transition-colors" title="${t('perm_delete')}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` : ''}
+            <button class="btn-action-history p-1 rounded hover:bg-yellow-100 text-yellow-600 dark:hover:bg-yellow-900 dark:text-yellow-400 transition-colors" title="Lịch sử"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg></button>
+            ${canDelete && (item.tinh_trang === 'Fail' || item.tinh_trang === 'Listing') ? `<button class="btn-action-delete p-1 rounded hover:bg-gray-200 text-gray-500 dark:hover:bg-gray-600 dark:text-gray-400 transition-colors" title="${t('perm_delete')}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg></button>` : ''}
         </div>
     `;
 
@@ -238,7 +234,7 @@ function createCard(item) {
                 });
             } else {
                 // Fallback for non-secure context
-                showToast(t('msg_copy_success') + ' (Manual)', 'success');
+                showToast(t('txt_manual_copy'), 'success');
             }
         };
     }

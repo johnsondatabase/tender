@@ -6,10 +6,10 @@ let dashboardChartInstances = {};
 let rawDetails = []; 
 let rawListings = []; 
 let psrFilters = {
-    product: 'all' // Removed range from here, moving to global
+    product: 'all' 
 };
 let dashboardDateFilter = {
-    type: 'year', // Default to current year
+    type: 'year', 
     start: '',
     end: ''
 };
@@ -19,14 +19,13 @@ let expirationFilterDays = 30;
 // View Modes
 let regionViewMode = 'count'; 
 let distributorViewMode = 'count';
-let statusViewMode = 'count'; // New: 'count' (Listing) vs 'value' (Product Volume)
-let contractMonitorMode = 'upcoming'; // New: 'upcoming' (Sắp hết) vs 'expired' (Đã hết)
+let statusViewMode = 'count'; 
+let contractMonitorMode = 'upcoming'; 
 
-// Separate Display Modes (Format: Number vs Percent)
-let regionDisplayMode = 'number'; // 'number' or 'percent'
-let distributorDisplayMode = 'number'; // 'number' or 'percent'
+// Separate Display Modes
+let regionDisplayMode = 'number'; 
+let distributorDisplayMode = 'number'; 
 
-// State to track expanded nodes
 let expandedHierarchyNodes = new Set();
 let expandedDistributorNodes = new Set(); 
 
@@ -39,15 +38,15 @@ if (typeof ChartDataLabels !== 'undefined') {
     Chart.register(ChartDataLabels);
 }
 
-// --- GLOBAL HELPER FUNCTIONS FOR HTML INTERACTIONS ---
+// --- GLOBAL HELPER FUNCTIONS ---
 
 window.copyToClipboard = function(text) {
     if (navigator.clipboard && window.isSecureContext) {
         navigator.clipboard.writeText(text).then(() => {
-            showToast(`Đã sao chép: ${text}`, 'success');
+            showToast(`${t('msg_copy_success')}: ${text}`, 'success');
         });
     } else {
-        showToast(`Đã sao chép thủ công: ${text}`, 'success');
+        showToast(`${t('txt_manual_copy')}: ${text}`, 'success');
     }
 };
 
@@ -93,40 +92,40 @@ function toggleNode(path, set, containerId) {
 export async function onShowDashboardView() {
     const container = document.getElementById('view-phat-trien');
     
-    // Updated HTML with Ultra-Compact 2-Row Sticky Header for Mobile
+    // Updated HTML with i18n data attributes
     container.innerHTML = `
         <div class="flex flex-col h-full bg-gray-50 dark:bg-gray-900 overflow-y-auto custom-scrollbar relative">
             
-            <!-- GLOBAL DATE FILTER BAR (Sticky & Compact) -->
+            <!-- GLOBAL DATE FILTER BAR -->
             <div class="sticky top-0 z-40 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm px-2 pt-2 md:px-6 md:pt-6 pb-2 transition-all shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
                 <div class="bg-white dark:bg-gray-800 p-2 md:p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row items-center gap-2 md:gap-3 justify-between">
                     
-                    <!-- Row 1: Period Buttons (Scrollable) -->
+                    <!-- Row 1: Period Buttons -->
                     <div class="w-full md:w-auto overflow-x-auto no-scrollbar flex-shrink-0">
                         <div class="flex items-center gap-2">
                             <span class="hidden md:flex text-sm font-bold text-gray-700 dark:text-gray-200 flex-shrink-0 items-center gap-1">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                                Thời gian:
+                                <span data-i18n="lbl_time">Thời gian:</span>
                             </span>
                             <div class="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg min-w-max">
-                                <button class="dash-date-btn px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600" data-type="all">Tất cả</button>
-                                <button class="dash-date-btn px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600" data-type="today">Hôm nay</button>
-                                <button class="dash-date-btn px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600" data-type="week">Tuần này</button>
-                                <button class="dash-date-btn px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600" data-type="month">Tháng này</button>
-                                <button class="dash-date-btn px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600" data-type="quarter">Quý này</button>
-                                <button class="dash-date-btn px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap bg-white dark:bg-gray-600 text-blue-600 shadow-sm" data-type="year">Năm nay</button>
+                                <button class="dash-date-btn px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600" data-type="all" data-i18n="opt_all">Tất cả</button>
+                                <button class="dash-date-btn px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600" data-type="today" data-i18n="opt_today">Hôm nay</button>
+                                <button class="dash-date-btn px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600" data-type="week" data-i18n="opt_week">Tuần này</button>
+                                <button class="dash-date-btn px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600" data-type="month" data-i18n="opt_month">Tháng này</button>
+                                <button class="dash-date-btn px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600" data-type="quarter" data-i18n="opt_quarter">Quý này</button>
+                                <button class="dash-date-btn px-3 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap bg-white dark:bg-gray-600 text-blue-600 shadow-sm" data-type="year" data-i18n="opt_year">Năm nay</button>
                             </div>
                         </div>
                     </div>
                     
                     <!-- Row 2: Custom Date Inputs -->
                     <div class="w-full md:w-auto flex items-center pt-1 md:pt-0 border-t md:border-t-0 border-dashed border-gray-200 dark:border-gray-700 md:border-none">
-                        <span class="hidden md:block text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap mr-2">Tùy chọn:</span>
+                        <span class="hidden md:block text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap mr-2" data-i18n="lbl_custom_opt">Tùy chọn:</span>
                         <div class="grid grid-cols-[1fr_auto_1fr_auto] gap-2 items-center w-full md:w-auto">
                             <input type="date" id="dash-date-start" class="w-full md:w-32 px-2 py-1.5 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-1 focus:ring-blue-500 outline-none">
                             <span class="text-gray-400">-</span>
                             <input type="date" id="dash-date-end" class="w-full md:w-32 px-2 py-1.5 text-xs border rounded-lg dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-1 focus:ring-blue-500 outline-none">
-                            <button id="btn-apply-dash-date" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap">Lọc</button>
+                            <button id="btn-apply-dash-date" class="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs hover:bg-blue-700 transition-colors shadow-sm whitespace-nowrap" data-i18n="btn_filter">Lọc</button>
                         </div>
                     </div>
 
@@ -140,28 +139,28 @@ export async function onShowDashboardView() {
                         <div class="text-blue-500 mb-1 bg-blue-50 dark:bg-blue-900/30 p-1.5 rounded-full">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
                         </div>
-                        <div class="text-[10px] text-gray-400 leading-tight">Hồ sơ</div>
+                        <div class="text-[10px] text-gray-400 leading-tight" data-i18n="mob_kpi_listings">Hồ sơ</div>
                         <div class="font-bold text-gray-800 dark:text-white text-xs truncate w-full" id="mob-kpi-listings">0</div>
                     </div>
                     <div class="bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-100 dark:border-gray-700 text-center shadow-sm flex flex-col items-center justify-center h-20">
                         <div class="text-purple-500 mb-1 bg-purple-50 dark:bg-purple-900/30 p-1.5 rounded-full">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                         </div>
-                        <div class="text-[10px] text-gray-400 leading-tight">Quota</div>
+                        <div class="text-[10px] text-gray-400 leading-tight" data-i18n="mob_kpi_quota">Quota</div>
                         <div class="font-bold text-gray-800 dark:text-white text-xs truncate w-full" id="mob-kpi-quota">0</div>
                     </div>
                     <div class="bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-100 dark:border-gray-700 text-center shadow-sm flex flex-col items-center justify-center h-20">
                         <div class="text-green-500 mb-1 bg-green-50 dark:bg-green-900/30 p-1.5 rounded-full">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
                         </div>
-                        <div class="text-[10px] text-gray-400 leading-tight">Thắng</div>
+                        <div class="text-[10px] text-gray-400 leading-tight" data-i18n="mob_kpi_win">Thắng</div>
                         <div class="font-bold text-green-600 dark:text-green-400 text-xs truncate w-full" id="mob-kpi-win">0</div>
                     </div>
                     <div class="bg-white dark:bg-gray-800 p-2 rounded-lg border border-gray-100 dark:border-gray-700 text-center shadow-sm flex flex-col items-center justify-center h-20">
                         <div class="text-orange-500 mb-1 bg-orange-50 dark:bg-orange-900/30 p-1.5 rounded-full">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z"></path></svg>
                         </div>
-                        <div class="text-[10px] text-gray-400 leading-tight">Tỷ lệ</div>
+                        <div class="text-[10px] text-gray-400 leading-tight" data-i18n="mob_kpi_rate">Tỷ lệ</div>
                         <div class="font-bold text-gray-800 dark:text-white text-xs truncate w-full" id="mob-kpi-rate">0%</div>
                     </div>
                 </div>
@@ -218,8 +217,8 @@ export async function onShowDashboardView() {
                             <h3 class="text-lg font-bold text-gray-800 dark:text-white" data-i18n="dash_chart_status">Tỷ Trọng Trạng Thái</h3>
                             <!-- Chart Mode Toggle -->
                             <div class="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
-                                <button class="status-mode-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all shadow-sm bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-300" data-mode="count">Theo Mã Thầu</button>
-                                <button class="status-mode-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" data-mode="value">Theo Vật Tư</button>
+                                <button class="status-mode-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all shadow-sm bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-300" data-mode="count" data-i18n="dt_ma_thau">Mã Thầu</button>
+                                <button class="status-mode-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" data-mode="value" data-i18n="dt_ma_vt">Vật Tư</button>
                             </div>
                         </div>
                         
@@ -249,7 +248,7 @@ export async function onShowDashboardView() {
                     <!-- Region Analysis -->
                     <div class="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col h-[300px] md:h-[650px]">
                         <div class="flex justify-between items-center mb-4 flex-shrink-0">
-                            <h3 class="text-lg font-bold text-gray-800 dark:text-white">Theo Địa bàn</h3>
+                            <h3 class="text-lg font-bold text-gray-800 dark:text-white" data-i18n="dash_region_analysis">Theo Địa bàn</h3>
                             
                             <div class="flex gap-2">
                                 <!-- Display Mode Toggle (Number vs %) -->
@@ -260,8 +259,8 @@ export async function onShowDashboardView() {
 
                                 <!-- Calculation Mode Toggle -->
                                 <div class="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
-                                    <button class="view-mode-btn region-mode-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all shadow-sm bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-300" data-target="region" data-mode="count">Mã Thầu</button>
-                                    <button class="view-mode-btn region-mode-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" data-target="region" data-mode="value">Lượng VT</button>
+                                    <button class="view-mode-btn region-mode-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all shadow-sm bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-300" data-target="region" data-mode="count" data-i18n="dt_ma_thau">Mã Thầu</button>
+                                    <button class="view-mode-btn region-mode-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" data-target="region" data-mode="value" data-i18n="dt_ma_vt">Vật Tư</button>
                                 </div>
                             </div>
                         </div>
@@ -275,7 +274,7 @@ export async function onShowDashboardView() {
                                     <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Waiting (Chờ)">W</div>
                                     <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Win (Trúng)">Wi</div>
                                     <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Fail (Trượt)">F</div>
-                                    <div class="w-20 text-center border-l border-gray-200 dark:border-gray-600">Tổng</div>
+                                    <div class="w-20 text-center border-l border-gray-200 dark:border-gray-600" data-i18n="stat_sum">Tổng</div>
                                 </div>
 
                                 <div class="flex-1 overflow-y-auto custom-scrollbar relative">
@@ -302,8 +301,8 @@ export async function onShowDashboardView() {
 
                                     <!-- Calculation Mode Toggle -->
                                     <div class="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
-                                        <button class="view-mode-btn dist-mode-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all shadow-sm bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-300" data-target="distributor" data-mode="count">Mã Thầu</button>
-                                        <button class="view-mode-btn dist-mode-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" data-target="distributor" data-mode="value">Lượng VT</button>
+                                        <button class="view-mode-btn dist-mode-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all shadow-sm bg-white dark:bg-gray-600 text-blue-600 dark:text-blue-300" data-target="distributor" data-mode="count" data-i18n="dt_ma_thau">Mã Thầu</button>
+                                        <button class="view-mode-btn dist-mode-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" data-target="distributor" data-mode="value" data-i18n="dt_ma_vt">Vật Tư</button>
                                     </div>
                                 </div>
                             </div>
@@ -312,12 +311,12 @@ export async function onShowDashboardView() {
                             <div class="overflow-x-auto custom-scrollbar flex-1 flex flex-col">
                                 <div class="min-w-[600px] flex flex-col h-full">
                                     <div class="flex items-center text-xs font-bold text-gray-500 dark:text-gray-400 border-b dark:border-gray-700 pb-2 mb-1 pr-2 select-none sticky top-0 bg-white dark:bg-gray-800 z-30">
-                                        <div class="flex-1 pl-2">NPP / <span id="dist-child-label">Chi tiết</span></div>
+                                        <div class="flex-1 pl-2">NPP / <span id="dist-child-label" data-i18n="header_detail">Chi tiết</span></div>
                                         <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Listing (Mới)">L</div>
                                         <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Waiting (Chờ)">W</div>
                                         <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Win (Trúng)">Wi</div>
                                         <div class="w-16 text-center border-l border-gray-200 dark:border-gray-600" title="Fail (Trượt)">F</div>
-                                        <div class="w-20 text-center border-l border-gray-200 dark:border-gray-600">Tổng</div>
+                                        <div class="w-20 text-center border-l border-gray-200 dark:border-gray-600" data-i18n="stat_sum">Tổng</div>
                                     </div>
 
                                     <div class="flex-1 overflow-y-auto custom-scrollbar relative">
@@ -330,11 +329,11 @@ export async function onShowDashboardView() {
                         <!-- Contract Monitoring -->
                         <div class="bg-white dark:bg-gray-800 p-4 md:p-6 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col overflow-hidden h-[300px] md:h-auto md:flex-1">
                             <div class="flex justify-between items-center mb-4">
-                                <h3 class="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2">Theo dõi hợp đồng</h3>
+                                <h3 class="text-lg font-bold text-gray-800 dark:text-white flex items-center gap-2" data-i18n="dash_monitor_contract">Theo dõi hợp đồng</h3>
                                 <!-- Tabs: Upcoming vs Expired -->
                                 <div class="flex bg-gray-100 dark:bg-gray-700 p-1 rounded-lg">
-                                    <button class="monitor-tab-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all shadow-sm bg-white dark:bg-gray-600 text-red-600 dark:text-red-300" data-mode="upcoming">Sắp hết hạn</button>
-                                    <button class="monitor-tab-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" data-mode="expired">Đã hết hạn</button>
+                                    <button class="monitor-tab-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all shadow-sm bg-white dark:bg-gray-600 text-red-600 dark:text-red-300" data-mode="upcoming" data-i18n="dash_expiring_soon">Sắp hết hạn</button>
+                                    <button class="monitor-tab-btn px-3 py-1.5 text-xs font-bold rounded-md transition-all text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200" data-mode="expired" data-i18n="dash_expired">Đã hết hạn</button>
                                 </div>
                             </div>
                             
@@ -351,7 +350,7 @@ export async function onShowDashboardView() {
                                         <tr>
                                             <th class="px-3 py-2" data-i18n="dt_ma_thau">Mã</th>
                                             <th class="px-3 py-2" data-i18n="dt_benh_vien">Bệnh Viện</th>
-                                            <th class="px-3 py-2 text-right">Tình trạng</th>
+                                            <th class="px-3 py-2 text-right" data-i18n="dt_tinh_trang">Tình trạng</th>
                                         </tr>
                                     </thead>
                                     <tbody id="expiring-contracts-body" class="divide-y divide-gray-100 dark:divide-gray-700 bg-white dark:bg-gray-800"></tbody>
@@ -369,7 +368,7 @@ export async function onShowDashboardView() {
                             <div class="flex flex-wrap gap-2 items-center w-full md:w-auto">
                                 <div class="relative group w-full md:w-56 z-20">
                                     <div class="relative">
-                                        <input type="text" id="psr-product-search" placeholder="Tất cả sản phẩm" class="w-full text-xs px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer" autocomplete="off">
+                                        <input type="text" id="psr-product-search" placeholder="Tất cả sản phẩm" class="w-full text-xs px-3 py-2 border rounded-lg bg-gray-50 dark:bg-gray-700 dark:border-gray-600 dark:text-white outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer" autocomplete="off" data-i18n="dash_filter_product">
                                     </div>
                                     <div id="psr-product-dropdown" class="absolute hidden w-full bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-lg shadow-xl mt-1 max-h-40 overflow-y-auto custom-scrollbar">
                                         <div class="p-1" id="psr-product-list"></div>
@@ -668,7 +667,7 @@ function calculateGlobalStats(listings, details) {
 
     const distChildLabel = document.getElementById('dist-child-label');
     if(distChildLabel) {
-        distChildLabel.textContent = distributorViewMode === 'count' ? 'Mã Thầu' : 'Mã VT';
+        distChildLabel.textContent = distributorViewMode === 'count' ? t('dt_ma_thau') : t('dt_ma_vt');
     }
 
     if (regionViewMode === 'value' || distributorViewMode === 'value') {
@@ -840,14 +839,14 @@ function renderHierarchy(tree, displayMode, rootStats) {
     const container = document.getElementById('hierarchy-tree');
     if (!container) return;
     container.innerHTML = generateTreeHTML(tree, expandedHierarchyNodes, 'hierarchy-tree', 0, "", displayMode, rootStats);
-    if (container.innerHTML === '') container.innerHTML = '<div class="p-4 text-center text-gray-400 italic">Chưa có dữ liệu</div>';
+    if (container.innerHTML === '') container.innerHTML = '<div class="p-4 text-center text-gray-400 italic">' + t('txt_no_data') + '</div>';
 }
 
 function renderDistributorAnalysis(tree, displayMode, rootStats) {
     const container = document.getElementById('distributor-tree');
     if (!container) return;
     container.innerHTML = generateTreeHTML(tree, expandedDistributorNodes, 'distributor-tree', 0, "", displayMode, rootStats);
-    if (container.innerHTML === '') container.innerHTML = '<div class="p-4 text-center text-gray-400 italic">Chưa có dữ liệu</div>';
+    if (container.innerHTML === '') container.innerHTML = '<div class="p-4 text-center text-gray-400 italic">' + t('txt_no_data') + '</div>';
 }
 
 function generateTreeHTML(node, expandedSet, containerId, level = 0, parentPath = "", displayMode = 'number', parentStats = null) {
@@ -989,8 +988,8 @@ function renderExpiringContracts(listings) {
 
     if (filteredListings.length === 0) {
         const msg = contractMonitorMode === 'upcoming' 
-            ? `Không có hợp đồng sắp hết hạn trong ${limitDays} ngày.` 
-            : `Không có hợp đồng đã hết hạn.`;
+            ? `${t('dash_expiring_soon')} (${limitDays} ${t('dt_days_left')}) - ${t('txt_no_data')}` 
+            : `${t('dash_expired')} - ${t('txt_no_data')}`;
         tbody.innerHTML = `<tr><td colspan="3" class="px-4 py-8 text-center text-gray-400 text-xs italic">${msg}</td></tr>`;
         return;
     }
@@ -1040,7 +1039,7 @@ function setupProductSearchDropdown(products) {
         list.innerHTML = '';
         const allOption = document.createElement('div');
         allOption.className = "px-3 py-2 text-xs hover:bg-blue-50 dark:hover:bg-gray-700 cursor-pointer text-gray-700 dark:text-gray-200 rounded";
-        allOption.textContent = "Tất cả sản phẩm";
+        allOption.textContent = t('opt_all');
         allOption.onclick = () => { input.value = ''; psrFilters.product = 'all'; dropdown.classList.add('hidden'); refreshPsrSection(rawDetails); };
         list.appendChild(allOption);
 
@@ -1048,7 +1047,7 @@ function setupProductSearchDropdown(products) {
         if (filtered.length === 0) {
             const noData = document.createElement('div');
             noData.className = "px-3 py-2 text-xs text-gray-400 text-center";
-            noData.textContent = "Không tìm thấy";
+            noData.textContent = t('txt_no_data');
             list.appendChild(noData);
         } else {
             filtered.forEach(p => {
@@ -1067,25 +1066,10 @@ function setupProductSearchDropdown(products) {
 }
 
 function refreshPsrSection(detailsToUse) {
-    // If no specific details passed (e.g. initial load), use global rawDetails but filtered by date
-    // Actually, in our new flow, we call this FROM applyDashboardDateFilter, so detailsToUse is already date-filtered.
-    // If called from product dropdown (internal filter), we need to re-apply Date Filter + Product Filter.
-    
-    // BUT wait, rawDetails contains ALL data. 
-    // We should use the currently "Date Filtered" subset as base.
-    // Let's rely on applyDashboardDateFilter to drive this.
-    // If called from dropdown, we trigger a full re-calc or just filter existing filtered set?
-    // Easiest: Call applyDashboardDateFilter() which eventually calls refreshPsrSection(dateFilteredDetails)
-    
-    // However, setupProductSearchDropdown calls refreshPsrSection directly. 
-    // Let's fix setupProductSearchDropdown to call applyDashboardDateFilter instead to keep flow consistent.
-    
-    // For now, let's assume detailsToUse IS the date-filtered set.
-    const finalDetails = applyPsrProductFilter(detailsToUse || rawDetails); // Apply Product Filter on top
+    const finalDetails = applyPsrProductFilter(detailsToUse || rawDetails); 
     renderPsrAnalysis(finalDetails);
 }
 
-// Renamed to clarify it only filters by product
 function applyPsrProductFilter(details) {
     const { product } = psrFilters;
     return details.filter(d => {
