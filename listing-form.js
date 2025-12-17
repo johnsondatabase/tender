@@ -129,7 +129,24 @@ export function addMaterialRow() {
 
 window.updateMaterial = function(index, field, value) {
     if(currentMaterials[index]) {
+        // --- VALIDATION: Mã VT ---
+        // Chỉ chấp nhận nếu có trong productCodes
+        if (field === 'ma_vt' && value && value.trim() !== '') {
+            if (productCodes.length > 0 && !productCodes.includes(value)) {
+                showToast(`Mã vật tư "${value}" không hợp lệ (không tồn tại).`, 'error');
+                
+                // Clear input UI
+                const inputEl = document.getElementById(`mat-input-${index}`);
+                if (inputEl) inputEl.value = '';
+                
+                // Don't update state with invalid value, treat as empty
+                value = ''; 
+            }
+        }
+        // -------------------------
+
         currentMaterials[index][field] = value;
+        
         // Auto-fill SL Trung when Quota changes
         if (field === 'quota') {
              currentMaterials[index]['sl_trung'] = value;
@@ -184,11 +201,13 @@ function setupAutocompletes(data) {
     setupSingleAutocomplete('l-npp', 'list-npp', PREDEFINED_NPP);
 }
 
-// Updated Helper: Added optional onSelect callback
+// Updated Helper: Added optional onSelect callback and isSelectionEvent logic
 function setupSingleAutocomplete(inputId, listId, values, onSelect = null) {
     const input = document.getElementById(inputId);
     const list = document.getElementById(listId);
     if (!input || !list) return;
+
+    let isSelectionEvent = false; // Flag to prevent re-opening on selection
 
     const renderList = (filterText = '') => {
         if(isReadOnlyMode) return;
@@ -210,17 +229,35 @@ function setupSingleAutocomplete(inputId, listId, values, onSelect = null) {
         
         list.querySelectorAll('li').forEach(li => {
             li.addEventListener('mousedown', (e) => {
-                e.preventDefault();
+                e.preventDefault(); // Prevent input blur before click is registered
+                
+                isSelectionEvent = true; // Set flag
+                
                 input.value = li.textContent;
-                list.classList.remove('show');
-                input.dispatchEvent(new Event('input')); // Trigger change
+                list.classList.remove('show'); // Force hide
+                
+                input.dispatchEvent(new Event('input')); // Trigger data binding
+                
                 if(onSelect) onSelect(input.value);
+                
+                // Reset flag after a minimal delay to allow event propagation to finish
+                setTimeout(() => { isSelectionEvent = false; }, 100);
             });
         });
     };
 
-    input.onfocus = () => renderList(input.value);
-    input.oninput = () => renderList(input.value);
+    input.onfocus = () => {
+        // Only show if not just selected
+        if (!isSelectionEvent) renderList(input.value);
+    };
+    
+    input.oninput = () => {
+        // If this input event was triggered by selection code, DO NOT re-render list
+        if (!isSelectionEvent) {
+            renderList(input.value);
+        }
+    };
+    
     input.onblur = () => { setTimeout(() => list.classList.remove('show'), 150); };
     
     // Logic auto-fill Khu vuc based on Tinh (Only for Main Form)

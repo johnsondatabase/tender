@@ -2,6 +2,8 @@
 
 
 
+
+
 export const translations = {
     vi: {
         // Login Screen
@@ -170,6 +172,7 @@ export const translations = {
         prod_image: "Hình ảnh",
         prod_ma_vt: "Mã SP",
         prod_ten_vt: "Tên SP",
+        prod_listing: "Listing", // New
         prod_waiting: "Waiting",
         prod_win: "Win",
         prod_fail: "Fail",
@@ -419,6 +422,7 @@ export const translations = {
         prod_image: "Image",
         prod_ma_vt: "Product Code",
         prod_ten_vt: "Product Name",
+        prod_listing: "Listing", // New
         prod_waiting: "Waiting",
         prod_win: "Win",
         prod_fail: "Fail",

@@ -1,14 +1,24 @@
+
 import { sb, showToast, showLoading, showConfirm, currentUser, sanitizeFileName, showView } from './app.js';
 import { translations, getCurrentLanguage, setLanguage } from './lang.js';
 
 let hot; // Handsontable instance
-let allData = []; // Full dataset from DB
-let displayedData = []; // Filtered dataset
+let allData = []; // Combined Data for Grid
+let displayedData = []; // Filtered by Search Keyword
+let rawProducts = []; // Raw Product Metadata
+let rawDetails = []; // Raw Transaction Data
 let productRealtimeChannel = null;
-let isProductLoaded = false; // Caching flag
-let currentManagingProduct = null; // Stores data of product currently being edited in image modal
-let addProductFiles = []; // Staging array for Add Product Form files
-let savedSearchKeyword = ''; // Persistence
+let isProductLoaded = false; 
+let currentManagingProduct = null; 
+let addProductFiles = []; 
+let savedSearchKeyword = ''; 
+
+// Date Filter State
+let productDateFilter = {
+    type: 'all', // all, today, week, month, quarter, year, custom
+    start: '',
+    end: ''
+};
 
 // User Preferences Key
 const getStorageKey = () => `crm_user_settings_${currentUser ? currentUser.gmail : 'guest'}_product_view_v4`;
@@ -29,9 +39,8 @@ function checkPermission(action) {
     } catch(e) { return false; }
 }
 
-// --- Custom Image Renderer (Shows Thumbnail & Count) ---
+// --- Custom Image Renderer ---
 function imageRenderer(instance, td, row, col, prop, value, cellProperties) {
-    // Clear content first
     td.innerHTML = '';
     td.className = 'htCenter htMiddle relative p-0'; 
 
@@ -41,7 +50,6 @@ function imageRenderer(instance, td, row, col, prop, value, cellProperties) {
             if (Array.isArray(value)) {
                 images = value;
             } else if (typeof value === 'string') {
-                // Try parsing JSON, if fails treat as single URL
                 if (value.trim().startsWith('[') || value.trim().startsWith('{')) {
                     try {
                         const parsed = JSON.parse(value);
@@ -59,27 +67,22 @@ function imageRenderer(instance, td, row, col, prop, value, cellProperties) {
     container.className = 'flex items-center justify-center w-full h-full cursor-pointer relative hover:bg-gray-100 transition-colors';
     container.style.minHeight = '40px';
     
-    // Retrieve the row data to pass to the modal
     const rowData = instance.getSourceDataAtRow(instance.toPhysicalRow(row));
 
-    // Double click handler attached directly to the cell content
     container.ondblclick = (e) => {
-        e.stopPropagation(); // Prevent Handsontable from entering edit mode
+        e.stopPropagation(); 
         openImageManager(rowData);
     };
 
     if (images.length > 0) {
         const firstUrl = images[0];
         const count = images.length;
-
-        // Thumbnail
         const img = document.createElement('img');
         img.src = firstUrl;
         img.className = 'h-8 w-8 object-cover rounded border border-gray-200 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700';
-        img.onerror = () => { img.src = 'https://via.placeholder.com/32?text=Err'; }; // Fallback
+        img.onerror = () => { img.src = 'https://via.placeholder.com/32?text=Err'; }; 
         container.appendChild(img);
 
-        // Count Badge (Only if > 1)
         if (count > 1) {
             const badge = document.createElement('span');
             badge.className = 'absolute -bottom-1 -right-1 bg-blue-600 text-white text-[9px] font-bold h-4 w-4 flex items-center justify-center rounded-full border border-white dark:border-gray-800 shadow-sm z-10';
@@ -87,7 +90,6 @@ function imageRenderer(instance, td, row, col, prop, value, cellProperties) {
             container.appendChild(badge);
         }
     } else {
-        // Empty State Icon (Plus icon to indicate "Add")
         container.innerHTML = '<svg class="w-5 h-5 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>';
     }
     
@@ -101,6 +103,7 @@ const BASE_COLUMNS = [
     { data: 'url_hinh_anh', type: 'text', titleKey: 'prod_image', width: 80, className: 'htCenter', renderer: imageRenderer, readOnly: true },
     { data: 'ma_vt', type: 'text', titleKey: 'prod_ma_vt', width: 120, readOnly: true }, 
     { data: 'ten_vt', type: 'text', titleKey: 'prod_ten_vt', width: 200 },
+    { data: 'listing', type: 'numeric', titleKey: 'prod_listing', width: 80, readOnly: true, className: 'htRight text-gray-600 font-bold' },
     { data: 'waiting', type: 'numeric', titleKey: 'prod_waiting', width: 80, readOnly: true, className: 'htRight text-blue-600 font-bold' },
     { data: 'win', type: 'numeric', titleKey: 'prod_win', width: 80, readOnly: true, className: 'htRight text-green-600 font-bold' },
     { data: 'fail', type: 'numeric', titleKey: 'prod_fail', width: 80, readOnly: true, className: 'htRight text-red-600 font-bold' },
@@ -110,11 +113,9 @@ const BASE_COLUMNS = [
     { data: 'group_product', type: 'text', titleKey: 'prod_group', width: 120 }
 ];
 
-// Current Column State (Order, Visibility)
 let columnSettings = [];
 let savedSortConfig = undefined; 
 
-// --- ESC Key Handler ---
 function handleProductEscKey(e) {
     if (e.key === 'Escape') {
         const addModal = document.getElementById('add-product-modal');
@@ -134,37 +135,25 @@ function handleProductEscKey(e) {
 export function onShowProductView(params = null) {
     const container = document.getElementById('view-san-pham');
     
-    // Handle Incoming Params (e.g. from Detail View)
     if (params && params.filterCode) {
         savedSearchKeyword = params.filterCode;
     }
 
-    // Optimization: If the view is already built (has the grid container), don't rebuild everything.
-    // Just refresh data.
     if (container.querySelector('#hot-product-container')) {
-        // Restore/Update search input
         const searchInput = document.getElementById('product-search');
         if(searchInput) searchInput.value = savedSearchKeyword;
 
-        // Refresh translations
         setLanguage(getCurrentLanguage());
-        // Update button text states if needed
         updateFilterButtonState();
         
-        // Trigger resize observer to fix Handsontable layout in tabs
-        setTimeout(() => {
-            if(hot) hot.refreshDimensions();
-        }, 50); // slight delay to ensure layout is visible
+        setTimeout(() => { if(hot) hot.refreshDimensions(); }, 50);
 
-        // If we have a forced filter from params, apply it
         if (params && params.filterCode) {
             filterData(savedSearchKeyword);
         } else {
-            // Or just refresh existing view
             fetchProductData(true);
         }
         
-        // Re-attach global listener just in case (it's safe to remove then add)
         document.removeEventListener('keydown', handleProductEscKey);
         document.addEventListener('keydown', handleProductEscKey);
         return;
@@ -184,7 +173,6 @@ export function onShowProductView(params = null) {
     const canImport = importPermissions.includes('view-san-pham');
     const canAdd = checkPermission('them');
     
-    // Build Mobile Add Menu Items
     let mobileAddMenuItems = `
         <button id="btn-prod-mobile-manual" class="block w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 border-b border-gray-100 flex items-center gap-2">
             <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
@@ -204,7 +192,6 @@ export function onShowProductView(params = null) {
         `;
     }
 
-    // Inject Structure
     container.innerHTML = `
         <div class="flex flex-col h-full relative">
             <input type="file" id="prod-import-input" accept=".xlsx, .xls" class="hidden" />
@@ -212,72 +199,100 @@ export function onShowProductView(params = null) {
             <!-- Toolbar -->
             <div class="flex flex-wrap items-center gap-2 p-2 bg-gray-50 dark:bg-gray-800 border-b dark:border-gray-700 shadow-sm z-[200]">
                 <!-- Search -->
-                <div class="relative w-full md:w-64">
+                <div class="relative w-full md:w-48 lg:w-64">
                     <span class="absolute inset-y-0 left-0 flex items-center pl-2">
                         <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                     </span>
                     <input type="text" id="product-search" class="w-full pl-8 pr-2 py-1.5 text-xs md:text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-1 focus:ring-blue-500 dark:text-white" data-i18n="search_all_cols" placeholder="Tìm kiếm...">
                 </div>
-                <div class="h-6 w-px bg-gray-300 dark:bg-gray-600 mx-1 hidden md:block"></div>
-                
-                <!-- Eye Toggle (Show/Hide Stats) - MOBILE ONLY -->
-                <button id="btn-toggle-prod-stats" class="md:hidden flex items-center justify-center p-1.5 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 transition-colors" title="Hiện/Ẩn số liệu">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
-                </button>
 
-                <!-- Filter Toggle -->
-                <button id="btn-toggle-prod-filter" class="flex items-center gap-1 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-xs font-medium text-gray-700 dark:text-gray-200 transition-colors">
-                    <!-- Icon injected via JS -->
-                </button>
-
-                <!-- Column Settings -->
-                <button id="btn-prod-col-settings" class="ml-1 flex items-center gap-1 px-2 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-xs font-medium text-gray-700 dark:text-gray-200 transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 00-2 2"></path></svg>
-                    <span class="hidden md:inline" data-i18n="btn_col_manager">Cột</span>
-                </button>
-
-                <!-- Delete Selected -->
-                <button id="btn-delete-selected" class="hidden ml-1 flex items-center gap-1 px-2 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded text-xs font-medium transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                    <span class="hidden md:inline" data-i18n="btn_delete_selected">Xóa</span>
-                </button>
-
-                <!-- Desktop buttons -->
-                <button id="btn-prod-template" class="${canImport ? 'hidden md:flex' : 'hidden'} ml-1 items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors text-xs font-medium">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                    <span class="hidden md:inline" data-i18n="btn_download_template">Mẫu</span>
-                </button>
-                <button id="btn-prod-import" class="${canImport ? 'hidden md:flex' : 'hidden'} ml-1 items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded transition-colors text-xs font-medium">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                    <span class="hidden md:inline" data-i18n="btn_import">Import</span>
-                </button>
-                <div class="relative ml-1 ${canExport ? '' : 'hidden'}">
-                    <button id="btn-prod-export" class="flex items-center gap-1 px-3 py-1.5 bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded text-xs font-medium transition-colors">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                        <span class="hidden md:inline" data-i18n="btn_export">Excel</span>
-                    </button>
-                    <div id="prod-export-dropdown" class="hidden absolute right-0 mt-1 w-40 bg-white dark:bg-gray-700 rounded-md shadow-lg border border-gray-200 dark:border-gray-600 z-[1000]">
-                        <div class="py-1">
-                            <button id="btn-prod-export-filtered" class="block w-full text-left px-4 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" data-i18n="btn_export_filtered">Xuất theo bộ lọc</button>
-                            <button id="btn-prod-export-all" class="block w-full text-left px-4 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" data-i18n="btn_export_all">Xuất tất cả</button>
+                <!-- Date Filter Scrollable Area (Mobile Adaptive) -->
+                <div class="flex-1 overflow-x-auto no-scrollbar mx-1 w-full md:w-auto order-3 md:order-2 border-t md:border-t-0 pt-2 md:pt-0 border-gray-200 dark:border-gray-700 md:border-none">
+                    <div class="flex items-center gap-1.5 min-w-max">
+                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap bg-white dark:bg-gray-600 text-blue-600 shadow-sm border border-gray-200 dark:border-gray-500" data-type="all">Tất cả</button>
+                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="today">Hôm nay</button>
+                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="week">Tuần này</button>
+                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="month">Tháng này</button>
+                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="quarter">Quý này</button>
+                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="year">Năm nay</button>
+                        
+                        <div class="h-4 w-px bg-gray-300 dark:bg-gray-600 mx-1"></div>
+                        
+                        <div class="flex items-center gap-1">
+                            <input type="date" id="prod-date-start" class="w-24 px-1 py-1 text-[10px] border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                            <span class="text-gray-400">-</span>
+                            <input type="date" id="prod-date-end" class="w-24 px-1 py-1 text-[10px] border rounded dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+                            <button id="btn-apply-prod-date" class="p-1 bg-blue-100 text-blue-600 rounded hover:bg-blue-200 dark:bg-blue-900/50 dark:text-blue-300">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                            </button>
                         </div>
                     </div>
                 </div>
-                <button id="btn-add-product" class="${canAdd ? 'hidden md:flex' : 'hidden'} ml-1 items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors shadow-sm">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                    <span data-i18n="btn_add_new">Thêm Mới</span>
-                </button>
-                
-                <!-- Mobile Add Button -->
-                <div class="${canAdd ? 'md:hidden relative ml-auto' : 'hidden'}">
-                    <button id="btn-prod-mobile-add" class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded shadow-sm transition-colors">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+
+                <!-- Right Side Actions -->
+                <div class="flex items-center gap-1 ml-auto order-2 md:order-3">
+                    <div class="h-6 w-px bg-gray-300 dark:bg-gray-600 mx-1 hidden md:block"></div>
+                    
+                    <!-- Eye Toggle (Show/Hide Stats) - MOBILE ONLY -->
+                    <button id="btn-toggle-prod-stats" class="md:hidden flex items-center justify-center p-1.5 bg-white dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 transition-colors" title="Hiện/Ẩn số liệu">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
                     </button>
-                    <div id="prod-mobile-add-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">${mobileAddMenuItems}</div>
+
+                    <!-- Filter Toggle -->
+                    <button id="btn-toggle-prod-filter" class="flex items-center gap-1 px-3 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-xs font-medium text-gray-700 dark:text-gray-200 transition-colors">
+                        <!-- Icon injected via JS -->
+                    </button>
+
+                    <!-- Column Settings -->
+                    <button id="btn-prod-col-settings" class="ml-1 flex items-center gap-1 px-2 py-1.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded text-xs font-medium text-gray-700 dark:text-gray-200 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 00-2 2"></path></svg>
+                        <span class="hidden md:inline" data-i18n="btn_col_manager">Cột</span>
+                    </button>
+
+                    <!-- Delete Selected -->
+                    <button id="btn-delete-selected" class="hidden ml-1 flex items-center gap-1 px-2 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded text-xs font-medium transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        <span class="hidden md:inline" data-i18n="btn_delete_selected">Xóa</span>
+                    </button>
+
+                    <!-- Desktop buttons -->
+                    <button id="btn-prod-template" class="${canImport ? 'hidden md:flex' : 'hidden'} ml-1 items-center gap-1 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors text-xs font-medium">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                        <span class="hidden md:inline" data-i18n="btn_download_template">Mẫu</span>
+                    </button>
+                    <button id="btn-prod-import" class="${canImport ? 'hidden md:flex' : 'hidden'} ml-1 items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 rounded transition-colors text-xs font-medium">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                        <span class="hidden md:inline" data-i18n="btn_import">Import</span>
+                    </button>
+                    <!-- EXPORT EXCEL (Green Style) -->
+                    <div class="relative ml-1 ${canExport ? '' : 'hidden'}">
+                        <button id="btn-prod-export" class="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 dark:bg-green-900/30 dark:text-green-300 dark:hover:bg-green-900/50 rounded text-xs font-medium transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            <span class="hidden md:inline" data-i18n="btn_export">Excel</span>
+                        </button>
+                        <div id="prod-export-dropdown" class="hidden absolute right-0 mt-1 w-40 bg-white dark:bg-gray-700 rounded-md shadow-lg border border-gray-200 dark:border-gray-600 z-[1000]">
+                            <div class="py-1">
+                                <button id="btn-prod-export-filtered" class="block w-full text-left px-4 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" data-i18n="btn_export_filtered">Xuất theo bộ lọc</button>
+                                <button id="btn-prod-export-all" class="block w-full text-left px-4 py-2 text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-600" data-i18n="btn_export_all">Xuất tất cả</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button id="btn-add-product" class="${canAdd ? 'hidden md:flex' : 'hidden'} ml-1 items-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition-colors shadow-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        <span data-i18n="btn_add_new">Thêm Mới</span>
+                    </button>
+                    
+                    <!-- Mobile Add Button -->
+                    <div class="${canAdd ? 'md:hidden relative ml-auto' : 'hidden'}">
+                        <button id="btn-prod-mobile-add" class="flex-shrink-0 w-8 h-8 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white rounded shadow-sm transition-colors">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        </button>
+                        <div id="prod-mobile-add-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">${mobileAddMenuItems}</div>
+                    </div>
                 </div>
             </div>
 
-            <!-- Stats Panel (Mobile - Top - Hidden by Default) -->
+            <!-- Stats Panel (Mobile) -->
             <div id="prod-stats-mobile" class="md:hidden hidden bg-blue-50 dark:bg-gray-800 border-b dark:border-gray-700 px-4 py-2 text-xs overflow-x-auto select-none transition-all duration-300">
                 <div class="flex flex-row items-center gap-4 min-w-max">
                     <div class="flex items-center gap-2 whitespace-nowrap">
@@ -285,17 +300,24 @@ export function onShowProductView(params = null) {
                         <span id="mob-prod-row-count" class="text-gray-800 dark:text-gray-100 font-bold">0</span>
                     </div>
                     <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
-                    <div class="flex items-center gap-1 whitespace-nowrap" title="Số lượng sản phẩm Waiting">
+                    
+                    <div class="flex items-center gap-1 whitespace-nowrap">
+                        <span class="text-gray-500" data-i18n="prod_listing">Listing:</span>
+                        <span id="mob-prod-listing" class="font-bold text-gray-600 dark:text-gray-300">0</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
+
+                    <div class="flex items-center gap-1 whitespace-nowrap">
                         <span class="text-blue-500" data-i18n="prod_waiting">Waiting:</span>
                         <span id="mob-prod-waiting" class="font-bold text-blue-600 dark:text-blue-400">0</span>
                     </div>
                     <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
-                    <div class="flex items-center gap-1 whitespace-nowrap" title="Số lượng sản phẩm Win">
+                    <div class="flex items-center gap-1 whitespace-nowrap">
                         <span class="text-green-500" data-i18n="prod_win">Win:</span>
                         <span id="mob-prod-win" class="font-bold text-green-600 dark:text-green-400">0</span>
                     </div>
                     <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
-                    <div class="flex items-center gap-1 whitespace-nowrap" title="Số lượng sản phẩm Fail">
+                    <div class="flex items-center gap-1 whitespace-nowrap">
                         <span class="text-red-500" data-i18n="prod_fail">Fail:</span>
                         <span id="mob-prod-fail" class="font-bold text-red-600 dark:text-red-400">0</span>
                     </div>
@@ -314,6 +336,13 @@ export function onShowProductView(params = null) {
                         <span id="desk-prod-row-count" class="text-gray-800 dark:text-gray-100 font-bold">0</span>
                     </div>
                     <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
+                    
+                    <div class="flex items-center gap-1 whitespace-nowrap">
+                        <span class="text-gray-500" data-i18n="prod_listing">Listing:</span>
+                        <span id="desk-prod-listing" class="font-bold text-gray-600 dark:text-gray-300">0</span>
+                    </div>
+                    <div class="w-px h-3 bg-gray-300 dark:bg-gray-600"></div>
+
                     <div class="flex items-center gap-1 whitespace-nowrap">
                         <span class="text-blue-500" data-i18n="prod_waiting">Waiting:</span>
                         <span id="desk-prod-waiting" class="font-bold text-blue-600 dark:text-blue-400">0</span>
@@ -335,7 +364,7 @@ export function onShowProductView(params = null) {
             </div>
         </div>
         
-        <!-- Add Product Modal -->
+        <!-- Add Product Modal, Image Modal, Column Modal are injected here in original code (omitted for brevity as they don't change) -->
         <div id="add-product-modal" class="hidden fixed inset-0 z-[10000] flex items-center justify-center modal-backdrop p-4">
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl transform transition-all flex flex-col max-h-[90vh]">
                 <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center">
@@ -356,73 +385,32 @@ export function onShowProductView(params = null) {
                     <div>
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Hình ảnh</label>
                         <div class="text-xs text-gray-500 dark:text-gray-400 mb-2">Chọn file hoặc dán ảnh (Ctrl+V) vào form này.</div>
-                        
-                        <!-- Preview Container -->
                         <div id="add-prod-img-previews" class="flex flex-wrap gap-2 mb-2 min-h-[40px] border-2 border-dashed border-gray-200 dark:border-gray-700 rounded p-2 bg-gray-50 dark:bg-gray-900/50 items-center">
                             <span class="text-gray-400 text-xs italic w-full text-center pointer-events-none">Khu vực dán ảnh</span>
                         </div>
-
                         <input type="file" id="prod-images" multiple accept="image/*" class="w-full text-sm text-gray-500 dark:text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
                     </div>
                     <div class="flex justify-end gap-3 pt-4 border-t dark:border-gray-700 mt-2"><button type="button" id="cancel-add-prod-btn" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300" data-i18n="btn_cancel">Hủy</button><button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md" data-i18n="btn_save">Lưu</button></div>
                 </form>
             </div>
         </div>
-
-        <!-- Image Management Modal -->
-        <div id="image-management-modal" class="hidden fixed inset-0 z-[11000] flex items-center justify-center modal-backdrop p-4">
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl flex flex-col h-[80vh] md:h-[85vh] relative overflow-hidden">
-                <!-- Header -->
-                <div class="flex justify-between items-center p-4 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex-shrink-0">
-                    <h3 id="img-modal-title" class="font-bold text-lg text-gray-800 dark:text-white truncate">Quản lý hình ảnh</h3>
-                    <button id="close-img-modal-btn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
-                </div>
-                
-                <!-- Body -->
-                <div id="img-modal-body" class="flex-1 p-4 overflow-y-auto bg-gray-100 dark:bg-gray-900 custom-scrollbar outline-none" tabindex="0">
-                    <div id="img-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                        <!-- Images Injected Here -->
-                    </div>
-                    <div id="img-empty-state" class="hidden flex flex-col items-center justify-center h-full text-gray-400">
-                        <svg class="w-16 h-16 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
-                        <p>Chưa có hình ảnh. Dán (Ctrl+V) hoặc chọn ảnh để thêm.</p>
-                    </div>
-                </div>
-
-                <!-- Footer -->
-                <div class="p-4 border-t dark:border-gray-700 bg-white dark:bg-gray-800 flex justify-between items-center flex-shrink-0">
-                    <div class="text-xs text-gray-500 dark:text-gray-400 hidden md:block">Mẹo: Bạn có thể dán ảnh trực tiếp (Ctrl+V) vào cửa sổ này. Kéo thả để sắp xếp.</div>
-                    <div class="flex gap-3">
-                        <label class="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200 px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                            Thêm ảnh
-                            <input type="file" id="img-modal-file-input" multiple accept="image/*" class="hidden">
-                        </label>
-                        <button id="btn-download-all-imgs" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors shadow-sm">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                            Tải xuống tất cả
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <div id="image-management-modal" class="hidden fixed inset-0 z-[11000] flex items-center justify-center modal-backdrop p-4"><div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl flex flex-col h-[80vh] md:h-[85vh] relative overflow-hidden"><div class="flex justify-between items-center p-4 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex-shrink-0"><h3 id="img-modal-title" class="font-bold text-lg text-gray-800 dark:text-white truncate">Quản lý hình ảnh</h3><button id="close-img-modal-btn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div><div id="img-modal-body" class="flex-1 p-4 overflow-y-auto bg-gray-100 dark:bg-gray-900 custom-scrollbar outline-none" tabindex="0"><div id="img-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div><div id="img-empty-state" class="hidden flex flex-col items-center justify-center h-full text-gray-400"><svg class="w-16 h-16 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><p>Chưa có hình ảnh. Dán (Ctrl+V) hoặc chọn ảnh để thêm.</p></div></div><div class="p-4 border-t dark:border-gray-700 bg-white dark:bg-gray-800 flex justify-between items-center flex-shrink-0"><div class="text-xs text-gray-500 dark:text-gray-400 hidden md:block">Mẹo: Bạn có thể dán ảnh trực tiếp (Ctrl+V) vào cửa sổ này. Kéo thả để sắp xếp.</div><div class="flex gap-3"><label class="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200 px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>Thêm ảnh<input type="file" id="img-modal-file-input" multiple accept="image/*" class="hidden"></label><button id="btn-download-all-imgs" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors shadow-sm"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>Tải xuống tất cả</button></div></div></div></div><div id="column-settings-modal" class="hidden fixed inset-0 z-[10000] flex items-center justify-center modal-backdrop p-4"><div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm flex flex-col max-h-[80vh]"><div class="p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700 rounded-t-xl"><h3 class="text-lg font-bold text-gray-800 dark:text-white" data-i18n="col_manager_title">Quản lý cột</h3><button id="close-col-settings-btn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div><div class="p-2 bg-yellow-50 dark:bg-yellow-900/20 text-xs text-yellow-800 dark:text-yellow-200 border-b dark:border-gray-700 text-center">Kéo thả để sắp xếp. Ghim để đưa lên đầu.</div><div id="column-list-container" class="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar"></div><div class="p-4 border-t dark:border-gray-700 flex justify-end"><button id="btn-save-cols" class="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 font-medium shadow-md" data-i18n="btn_save">Áp dụng</button></div></div></div>
     `;
     
     setLanguage(getCurrentLanguage());
     loadUserSettings();
 
-    // --- Initial Setup ---
     document.removeEventListener('keydown', handleProductEscKey);
     document.addEventListener('keydown', handleProductEscKey);
 
     const initCore = (silent) => {
-        // Init table structure first (empty or with cached data)
         initHandsontable();
         updateTableData(); 
         setupToolbarListeners();
         setupExportListeners();
         setupImageModalListeners(); 
         setupAddProductFormListeners(); 
+        setupProductDateFilterListeners(); // NEW: Date Filter Listeners
         
         const resizeObserver = new ResizeObserver(() => {
             if(hot) hot.refreshDimensions();
@@ -435,7 +423,6 @@ export function onShowProductView(params = null) {
             filterData(savedSearchKeyword);
         }
 
-        // Fetch in background (non-blocking)
         fetchProductData(silent);
     };
 
@@ -453,428 +440,150 @@ export function onShowProductView(params = null) {
     }
 }
 
-// ... (Add Product & Image Logic UNCHANGED) ...
+// --- Date Filter Logic ---
 
-function setupAddProductFormListeners() {
-    const addForm = document.getElementById('add-product-form');
-    const imageInput = document.getElementById('prod-images');
-    const previewContainer = document.getElementById('add-prod-img-previews');
-    const btnAdd = document.getElementById('btn-add-product');
-    const addModal = document.getElementById('add-product-modal');
-    const closeAddBtn = document.getElementById('close-add-prod-btn');
-    const cancelAddBtn = document.getElementById('cancel-add-prod-btn');
+function setupProductDateFilterListeners() {
+    const btns = document.querySelectorAll('.prod-date-btn');
+    const startInput = document.getElementById('prod-date-start');
+    const endInput = document.getElementById('prod-date-end');
+    const applyBtn = document.getElementById('btn-apply-prod-date');
 
-    if (!addForm) return;
-
-    // Reset State on Open
-    const resetForm = () => {
-        addForm.reset();
-        addProductFiles = [];
-        renderAddProductPreviews();
-        addModal.classList.remove('hidden');
-        populateAutocompletes();
-        addForm.focus(); // Focus for paste
-    };
-
-    if(btnAdd) btnAdd.onclick = resetForm;
-    const btnMobManual = document.getElementById('btn-prod-mobile-manual');
-    if(btnMobManual) btnMobManual.onclick = () => {
-        document.getElementById('prod-mobile-add-dropdown').classList.add('hidden');
-        resetForm();
-    };
-
-    const closeAddModal = () => addModal.classList.add('hidden');
-    if(closeAddBtn) closeAddBtn.onclick = closeAddModal;
-    if(cancelAddBtn) cancelAddBtn.onclick = closeAddModal;
-
-    // File Input Change
-    imageInput.onchange = (e) => {
-        if (e.target.files.length > 0) {
-            Array.from(e.target.files).forEach(file => {
-                addProductFiles.push(file);
-            });
-            renderAddProductPreviews();
-            e.target.value = ''; // Reset input to allow selecting same file again if needed
-        }
-    };
-
-    // Paste Event
-    addForm.addEventListener('paste', (e) => {
-        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-        let hasImages = false;
-        for (let index in items) {
-            const item = items[index];
-            if (item.kind === 'file' && item.type.startsWith('image/')) {
-                const blob = item.getAsFile();
-                addProductFiles.push(blob);
-                hasImages = true;
-            }
-        }
-        if(hasImages) renderAddProductPreviews();
-    });
-
-    // Submit Logic
-    addForm.onsubmit = async (e) => {
-        e.preventDefault();
-        const ma_vt = document.getElementById('new-ma-vt').value;
-        const ten_vt = document.getElementById('new-ten-vt').value;
-        const cau_hinh_1 = document.getElementById('new-ch1').value;
-        const cau_hinh_2 = document.getElementById('new-ch2').value;
-        const nganh = document.getElementById('new-nganh').value;
-        const group_product = document.getElementById('new-group').value;
-
-        if (allData.some(i => i.ma_vt === ma_vt)) {
-            showToast('Mã vật tư đã tồn tại.', 'error');
-            return;
-        }
-
-        showLoading(true);
-        let uploadedUrls = [];
-        
-        // Upload from addProductFiles array
-        if (addProductFiles.length > 0) {
-            for(const file of addProductFiles) {
-                try {
-                    // Ensure name exists (pasted blobs might need generic names)
-                    const fileName = file.name || `pasted_image_${Date.now()}.png`;
-                    const safeName = sanitizeFileName(`${Date.now()}-${fileName}`);
-                    const { data: uploadData, error: uploadError } = await sb.storage.from('hinh_anh').upload(`public/${safeName}`, file);
-                    if (!uploadError) {
-                        const { data: publicUrlData } = sb.storage.from('hinh_anh').getPublicUrl(`public/${safeName}`);
-                        if (publicUrlData) uploadedUrls.push(publicUrlData.publicUrl);
-                    }
-                } catch(err) { console.error("Image upload error", err); }
-            }
-        }
-
-        const insertData = {
-            ma_vt, ten_vt, cau_hinh_1, cau_hinh_2, nganh, group_product,
-            url_hinh_anh: JSON.stringify(uploadedUrls) 
-        };
-
-        const { error } = await sb.from('product').insert(insertData);
-        showLoading(false);
-
-        if (error) {
-            showToast('Lỗi thêm mới: ' + error.message, 'error');
-        } else {
-            showToast('Thêm mới thành công', 'success');
-            closeAddModal();
-            fetchProductData();
-        }
-    };
-}
-
-function renderAddProductPreviews() {
-    const container = document.getElementById('add-prod-img-previews');
-    if (!container) return;
-    
-    container.innerHTML = '';
-    if (addProductFiles.length === 0) {
-        container.innerHTML = '<span class="text-gray-400 text-xs italic w-full text-center pointer-events-none">Khu vực dán ảnh (Ctrl+V) hoặc chọn bên dưới</span>';
-        return;
-    }
-
-    addProductFiles.forEach((file, index) => {
-        const url = URL.createObjectURL(file);
-        const div = document.createElement('div');
-        div.className = 'relative w-16 h-16 border border-gray-300 rounded overflow-hidden group';
-        div.innerHTML = `
-            <img src="${url}" class="w-full h-full object-cover">
-            <button type="button" class="absolute top-0 right-0 bg-red-500 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity rounded-bl" title="Xóa">
-                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>
-        `;
-        div.querySelector('button').onclick = () => {
-            addProductFiles.splice(index, 1);
-            renderAddProductPreviews();
-        };
-        container.appendChild(div);
-    });
-}
-
-function setupImageModalListeners() {
-    const modal = document.getElementById('image-management-modal');
-    const closeBtn = document.getElementById('close-img-modal-btn');
-    const fileInput = document.getElementById('img-modal-file-input');
-    const downloadBtn = document.getElementById('btn-download-all-imgs');
-    const body = document.getElementById('img-modal-body');
-
-    if (!modal) return;
-
-    closeBtn.onclick = () => modal.classList.add('hidden');
-    
-    fileInput.onchange = async (e) => {
-        if (e.target.files.length > 0) {
-            await uploadImages(e.target.files);
-            e.target.value = ''; // Reset
-        }
-    };
-
-    downloadBtn.onclick = downloadAllImages;
-
-    // Paste Listener for Body
-    body.addEventListener('paste', async (e) => {
-        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-        const files = [];
-        for (let index in items) {
-            const item = items[index];
-            if (item.kind === 'file' && item.type.startsWith('image/')) {
-                files.push(item.getAsFile());
-            }
-        }
-        if (files.length > 0) {
-            await uploadImages(files);
-        }
-    });
-}
-
-function openImageManager(rowData) {
-    if (!checkPermission('sua') && !checkPermission('xem')) return;
-    
-    currentManagingProduct = rowData;
-    const modal = document.getElementById('image-management-modal');
-    const title = document.getElementById('img-modal-title');
-    
-    if (!modal) return;
-
-    title.textContent = `${rowData.ten_vt || 'Sản phẩm'} (${rowData.ma_vt})`;
-    renderImageGrid();
-    
-    modal.classList.remove('hidden');
-    document.getElementById('img-modal-body').focus();
-}
-
-function renderImageGrid() {
-    const container = document.getElementById('img-grid');
-    const emptyState = document.getElementById('img-empty-state');
-    
-    if (!container) return;
-    container.innerHTML = '';
-
-    let images = [];
-    try {
-        if (currentManagingProduct.url_hinh_anh) {
-            const raw = currentManagingProduct.url_hinh_anh;
-            if (Array.isArray(raw)) {
-                images = raw;
-            } else if (typeof raw === 'string') {
-                if (raw.startsWith('[')) {
-                    try { images = JSON.parse(raw); } catch(e) { images = [raw]; }
-                } else {
-                    images = [raw];
-                }
-            }
-        }
-    } catch(e) { images = []; }
-
-    if (images.length === 0) {
-        emptyState.classList.remove('hidden');
-        return;
-    } else {
-        emptyState.classList.add('hidden');
-    }
-
-    const canEdit = checkPermission('sua');
-
-    images.forEach((url, index) => {
-        const wrapper = document.createElement('div');
-        wrapper.className = 'group relative aspect-square bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden border dark:border-gray-600 shadow-sm cursor-grab active:cursor-grabbing';
-        wrapper.setAttribute('data-url', url);
-        
-        wrapper.innerHTML = `
-            <img src="${url}" class="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" onclick="window.open('${url}', '_blank')">
-            <div class="absolute top-2 left-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm pointer-events-none">#${index + 1}</div>
-            ${canEdit ? `<button class="btn-delete-img absolute top-2 right-2 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-transform hover:scale-110" data-index="${index}">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>` : ''}
-        `;
-        
-        if (canEdit) {
-            wrapper.querySelector('.btn-delete-img').onclick = (e) => {
-                e.stopPropagation();
-                deleteImage(index);
-            };
-        }
-        
-        container.appendChild(wrapper);
-    });
-
-    if (canEdit) {
-        new Sortable(container, {
-            animation: 150,
-            ghostClass: 'opacity-50',
-            delay: 100, // Slight delay to prevent accidental drag on touch
-            delayOnTouchOnly: true,
-            onEnd: async (evt) => {
-                if (evt.oldIndex === evt.newIndex) return;
-                
-                const movedItem = images.splice(evt.oldIndex, 1)[0];
-                images.splice(evt.newIndex, 0, movedItem);
-                
-                showLoading(true);
-                const { error } = await sb.from('product').update({ url_hinh_anh: JSON.stringify(images) }).eq('ma_vt', currentManagingProduct.ma_vt);
-                showLoading(false);
-                
-                if (error) {
-                    showToast("Lỗi cập nhật vị trí: " + error.message, 'error');
-                    renderImageGrid();
-                } else {
-                    currentManagingProduct.url_hinh_anh = JSON.stringify(images);
-                    renderImageGrid(); 
-                    fetchProductData(true); 
-                }
+    const updateActiveButton = (type) => {
+        btns.forEach(b => {
+            if (b.dataset.type === type) {
+                b.className = "prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap bg-white dark:bg-gray-600 text-blue-600 shadow-sm border border-gray-200 dark:border-gray-500 ring-1 ring-blue-500/20";
+            } else {
+                b.className = "prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200";
             }
         });
-    }
-}
+    };
 
-async function uploadImages(fileList) {
-    if (!currentManagingProduct || !checkPermission('sua')) return;
-    
-    showLoading(true);
-    const newUrls = [];
-    
-    for (const file of fileList) {
-        try {
-            const safeName = sanitizeFileName(`${currentManagingProduct.ma_vt}-${Date.now()}-${file.name}`);
-            const { data: uploadData, error: uploadError } = await sb.storage.from('hinh_anh').upload(`public/${safeName}`, file);
-            
-            if (!uploadError) {
-                const { data: publicUrlData } = sb.storage.from('hinh_anh').getPublicUrl(`public/${safeName}`);
-                if (publicUrlData) newUrls.push(publicUrlData.publicUrl);
-            }
-        } catch (e) {
-            console.error("Upload fail:", e);
-        }
-    }
+    updateActiveButton('all');
 
-    if (newUrls.length > 0) {
-        let existingImages = [];
-        try {
-            const raw = currentManagingProduct.url_hinh_anh;
-            if (Array.isArray(raw)) existingImages = raw;
-            else if (typeof raw === 'string') {
-                if (raw.startsWith('[')) existingImages = JSON.parse(raw);
-                else if(raw) existingImages = [raw];
-            }
-        } catch(e) { existingImages = []; }
-
-        const combined = [...existingImages, ...newUrls];
-        
-        const { error } = await sb.from('product').update({ url_hinh_anh: JSON.stringify(combined) }).eq('ma_vt', currentManagingProduct.ma_vt);
-        
-        if (error) {
-            showToast("Lỗi cập nhật: " + error.message, 'error');
-        } else {
-            currentManagingProduct.url_hinh_anh = JSON.stringify(combined); 
-            renderImageGrid();
-            fetchProductData(true);
-        }
-    }
-    showLoading(false);
-}
-
-async function deleteImage(index) {
-    if (!currentManagingProduct) return;
-    const confirmed = await showConfirm("Bạn có chắc muốn xóa ảnh này?");
-    if (!confirmed) return;
-
-    let existingImages = [];
-    try {
-        const raw = currentManagingProduct.url_hinh_anh;
-        if (Array.isArray(raw)) existingImages = raw;
-        else if (typeof raw === 'string') {
-            if (raw.startsWith('[')) existingImages = JSON.parse(raw);
-            else if(raw) existingImages = [raw];
-        }
-    } catch(e) { return; }
-
-    if (index >= 0 && index < existingImages.length) {
-        existingImages.splice(index, 1);
-        showLoading(true);
-        const { error } = await sb.from('product').update({ url_hinh_anh: JSON.stringify(existingImages) }).eq('ma_vt', currentManagingProduct.ma_vt);
-        showLoading(false);
-
-        if (error) {
-            showToast("Lỗi xóa: " + error.message, 'error');
-        } else {
-            currentManagingProduct.url_hinh_anh = JSON.stringify(existingImages);
-            renderImageGrid();
-            fetchProductData(true);
-        }
-    }
-}
-
-async function downloadAllImages() {
-    if (!currentManagingProduct) return;
-    
-    let images = [];
-    try {
-        const raw = currentManagingProduct.url_hinh_anh;
-        if (Array.isArray(raw)) images = raw;
-        else if (typeof raw === 'string') {
-            if (raw.startsWith('[')) images = JSON.parse(raw);
-            else if(raw) images = [raw];
-        }
-    } catch(e) { return; }
-
-    if (images.length === 0) {
-        showToast("Không có ảnh để tải.", 'info');
-        return;
-    }
-
-    showLoading(true);
-    try {
-        const zip = new JSZip();
-        
-        const promises = images.map(async (url, i) => {
-            try {
-                const response = await fetch(url);
-                const blob = await response.blob();
-                
-                let ext = 'jpg';
-                const type = blob.type;
-                if (type === 'image/png') ext = 'png';
-                else if (type === 'image/jpeg') ext = 'jpg';
-                else if (type === 'image/webp') ext = 'webp';
-                
-                const filename = `hinh_anh_${currentManagingProduct.ma_vt}_${i + 1}.${ext}`;
-                zip.file(filename, blob);
-            } catch(e) { console.error("Fetch error", e); }
+    btns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const type = btn.dataset.type;
+            productDateFilter.type = type;
+            productDateFilter.start = '';
+            productDateFilter.end = '';
+            startInput.value = '';
+            endInput.value = '';
+            updateActiveButton(type);
+            recalcProductData(); // Recalculate based on new filter
         });
+    });
 
-        await Promise.all(promises);
-        
-        const content = await zip.generateAsync({ type: "blob" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(content);
-        link.download = `hinh_anh_${currentManagingProduct.ma_vt}.zip`;
-        link.click();
-        URL.revokeObjectURL(link.href);
-        
-        showToast("Tải xuống hoàn tất.", 'success');
-    } catch (error) {
-        console.error(error);
-        showToast("Lỗi khi tạo file zip.", 'error');
-    } finally {
-        showLoading(false);
-    }
+    applyBtn.addEventListener('click', () => {
+        const start = startInput.value;
+        const end = endInput.value;
+        if (start && end) {
+            productDateFilter.type = 'custom';
+            productDateFilter.start = start;
+            productDateFilter.end = end;
+            updateActiveButton('custom'); 
+            recalcProductData();
+        } else {
+            showToast("Vui lòng chọn cả ngày bắt đầu và kết thúc.", "info");
+        }
+    });
 }
+
+function isDateInProductRange(dateString) {
+    if (!dateString) return false;
+    const d = new Date(dateString);
+    d.setHours(0,0,0,0);
+    const now = new Date();
+    now.setHours(0,0,0,0);
+
+    const { type, start, end } = productDateFilter;
+
+    if (type === 'all') return true;
+    
+    if (type === 'custom' && start && end) {
+        const s = new Date(start); s.setHours(0,0,0,0);
+        const e = new Date(end); e.setHours(0,0,0,0);
+        return d >= s && d <= e;
+    }
+
+    if (type === 'today') return d.getTime() === now.getTime();
+    
+    if (type === 'week') {
+        const day = now.getDay() || 7; 
+        const startOfWeek = new Date(now);
+        if (day !== 1) startOfWeek.setHours(-24 * (day - 1)); 
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+        return d >= startOfWeek && d <= endOfWeek;
+    }
+
+    if (type === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    
+    if (type === 'quarter') {
+        const qNow = Math.floor(now.getMonth() / 3);
+        const qDate = Math.floor(d.getMonth() / 3);
+        return qNow === qDate && d.getFullYear() === now.getFullYear();
+    }
+
+    if (type === 'year') return d.getFullYear() === now.getFullYear();
+
+    return true;
+}
+
+// --- Data Fetching & Calculation ---
 
 async function fetchProductData(silent = false) {
     if(!silent) showLoading(true);
-    const { data, error } = await sb.from('product_total').select('*').order('ma_vt', { ascending: true });
+    
+    // 1. Fetch Products
+    const { data: prods, error: pErr } = await sb.from('product').select('*').order('ma_vt', { ascending: true });
+    
+    // 2. Fetch Details (Only needed columns)
+    const { data: dets, error: dErr } = await sb.from('detail').select('ma_vt, quota, sl_trung, tinh_trang, ngay');
+
     if(!silent) showLoading(false);
 
-    if (error) {
-        showToast('Lỗi tải dữ liệu sản phẩm: ' + error.message, 'error');
+    if (pErr || dErr) {
+        showToast('Lỗi tải dữ liệu: ' + (pErr?.message || dErr?.message), 'error');
         return;
     }
 
-    allData = (data || []).map(item => ({ ...item, selected: false }));
+    rawProducts = prods || [];
+    rawDetails = dets || [];
     isProductLoaded = true;
 
+    recalcProductData();
+}
+
+function recalcProductData() {
+    // 1. Filter Details based on Date Range
+    const filteredDetails = rawDetails.filter(d => isDateInProductRange(d.ngay));
+
+    // 2. Aggregate Stats per Product
+    const stats = {};
+    filteredDetails.forEach(d => {
+        if (!d.ma_vt) return;
+        if (!stats[d.ma_vt]) stats[d.ma_vt] = { listing: 0, waiting: 0, win: 0, fail: 0 };
+        
+        const q = d.quota || 0;
+        const w = d.sl_trung || 0;
+        
+        if (d.tinh_trang === 'Listing') stats[d.ma_vt].listing += q;
+        else if (d.tinh_trang === 'Waiting') stats[d.ma_vt].waiting += q;
+        else if (d.tinh_trang === 'Win') stats[d.ma_vt].win += w;
+        else if (d.tinh_trang === 'Fail') stats[d.ma_vt].fail += q;
+    });
+
+    // 3. Merge with Products
+    allData = rawProducts.map(p => ({
+        ...p,
+        listing: stats[p.ma_vt]?.listing || 0,
+        waiting: stats[p.ma_vt]?.waiting || 0,
+        win: stats[p.ma_vt]?.win || 0,
+        fail: stats[p.ma_vt]?.fail || 0,
+        selected: false
+    }));
+
+    // 4. Update View
     if(savedSearchKeyword) filterData(savedSearchKeyword);
     else displayedData = [...allData];
     
@@ -1029,7 +738,7 @@ function initHandsontable() {
                     hasSelectionChange = true;
                     continue; 
                 }
-                if(['ma_vt','waiting','win','fail','url_hinh_anh'].includes(prop)) continue; 
+                if(['ma_vt','listing','waiting','win','fail','url_hinh_anh'].includes(prop)) continue; 
 
                 const maVt = rowData.ma_vt;
                 if (!maVt) continue;
@@ -1092,36 +801,32 @@ async function deleteSelectedProducts() {
     }
 }
 
-// Updated Table Data Logic: No Pagination
 function updateTableData() {
     if (!hot) return;
-    
-    // Load ALL displayed data (no slicing)
     hot.loadData(displayedData);
-    
-    // Update Stats
     calculateHotTotals();
-    
     updateFilterButtonState();
     updateBulkDeleteButton();
     setTimeout(() => hot.render(), 100); 
 }
 
-// Renamed & Updated Function: Calculate Totals based on VISIBLE (Filtered) Rows
 function calculateHotTotals() {
     if (!hot) return;
 
     const visibleData = hot.getData();
+    const listingIdx = hot.propToCol('listing');
     const waitingIdx = hot.propToCol('waiting');
     const winIdx = hot.propToCol('win');
     const failIdx = hot.propToCol('fail');
 
+    let totalListing = 0;
     let totalWaiting = 0;
     let totalWin = 0;
     let totalFail = 0;
 
     visibleData.forEach(row => {
         if (row) {
+            totalListing += (listingIdx !== null) ? (parseFloat(row[listingIdx]) || 0) : 0;
             totalWaiting += (waitingIdx !== null) ? (parseFloat(row[waitingIdx]) || 0) : 0;
             totalWin += (winIdx !== null) ? (parseFloat(row[winIdx]) || 0) : 0;
             totalFail += (failIdx !== null) ? (parseFloat(row[failIdx]) || 0) : 0;
@@ -1132,11 +837,13 @@ function calculateHotTotals() {
     const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = fmt(val); };
 
     // Update Mobile Stats
+    setVal('mob-prod-listing', totalListing);
     setVal('mob-prod-waiting', totalWaiting);
     setVal('mob-prod-win', totalWin);
     setVal('mob-prod-fail', totalFail);
     
     // Update Desktop Stats
+    setVal('desk-prod-listing', totalListing);
     setVal('desk-prod-waiting', totalWaiting);
     setVal('desk-prod-win', totalWin);
     setVal('desk-prod-fail', totalFail);
@@ -1193,7 +900,6 @@ function filterData(keyword) {
             return Object.values(item).some(val => String(val).toLowerCase().includes(lower));
         });
     }
-    // No paging reset needed
     updateTableData();
 }
 
@@ -1235,14 +941,12 @@ function setupToolbarListeners() {
         else { container.classList.toggle('filters-hidden'); updateFilterButtonState(); }
     };
 
-    // Toggle Stats Button (Mobile Only)
     const statsBtn = document.getElementById('btn-toggle-prod-stats');
     if(statsBtn) {
         statsBtn.onclick = () => {
             const panel = document.getElementById('prod-stats-mobile');
             if(panel) {
                 panel.classList.toggle('hidden');
-                // Refresh Handsontable dimensions as container size changes
                 if(hot) setTimeout(() => hot.refreshDimensions(), 100);
             }
         };
@@ -1477,3 +1181,406 @@ function exportToExcel(type) {
         finally { showLoading(false); }
     }, 100);
 }
+
+// ... (setupAddProductFormListeners, setupImageModalListeners, openImageManager, renderImageGrid, uploadImages, deleteImage, downloadAllImages UNCHANGED) ...
+
+function setupAddProductFormListeners() {
+    const addForm = document.getElementById('add-product-form');
+    const imageInput = document.getElementById('prod-images');
+    const previewContainer = document.getElementById('add-prod-img-previews');
+    const btnAdd = document.getElementById('btn-add-product');
+    const addModal = document.getElementById('add-product-modal');
+    const closeAddBtn = document.getElementById('close-add-prod-btn');
+    const cancelAddBtn = document.getElementById('cancel-add-prod-btn');
+
+    if (!addForm) return;
+
+    const resetForm = () => {
+        addForm.reset();
+        addProductFiles = [];
+        renderAddProductPreviews();
+        addModal.classList.remove('hidden');
+        populateAutocompletes();
+        addForm.focus(); 
+    };
+
+    if(btnAdd) btnAdd.onclick = resetForm;
+    const btnMobManual = document.getElementById('btn-prod-mobile-manual');
+    if(btnMobManual) btnMobManual.onclick = () => {
+        document.getElementById('prod-mobile-add-dropdown').classList.add('hidden');
+        resetForm();
+    };
+
+    const closeAddModal = () => addModal.classList.add('hidden');
+    if(closeAddBtn) closeAddBtn.onclick = closeAddModal;
+    if(cancelAddBtn) cancelAddBtn.onclick = closeAddModal;
+
+    imageInput.onchange = (e) => {
+        if (e.target.files.length > 0) {
+            Array.from(e.target.files).forEach(file => {
+                addProductFiles.push(file);
+            });
+            renderAddProductPreviews();
+            e.target.value = ''; 
+        }
+    };
+
+    addForm.addEventListener('paste', (e) => {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        let hasImages = false;
+        for (let index in items) {
+            const item = items[index];
+            if (item.kind === 'file' && item.type.startsWith('image/')) {
+                const blob = item.getAsFile();
+                addProductFiles.push(blob);
+                hasImages = true;
+            }
+        }
+        if(hasImages) renderAddProductPreviews();
+    });
+
+    addForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const ma_vt = document.getElementById('new-ma-vt').value;
+        const ten_vt = document.getElementById('new-ten-vt').value;
+        const cau_hinh_1 = document.getElementById('new-ch1').value;
+        const cau_hinh_2 = document.getElementById('new-ch2').value;
+        const nganh = document.getElementById('new-nganh').value;
+        const group_product = document.getElementById('new-group').value;
+
+        if (allData.some(i => i.ma_vt === ma_vt)) {
+            showToast('Mã vật tư đã tồn tại.', 'error');
+            return;
+        }
+
+        showLoading(true);
+        let uploadedUrls = [];
+        
+        if (addProductFiles.length > 0) {
+            for(const file of addProductFiles) {
+                try {
+                    const fileName = file.name || `pasted_image_${Date.now()}.png`;
+                    const safeName = sanitizeFileName(`${Date.now()}-${fileName}`);
+                    const { data: uploadData, error: uploadError } = await sb.storage.from('hinh_anh').upload(`public/${safeName}`, file);
+                    if (!uploadError) {
+                        const { data: publicUrlData } = sb.storage.from('hinh_anh').getPublicUrl(`public/${safeName}`);
+                        if (publicUrlData) uploadedUrls.push(publicUrlData.publicUrl);
+                    }
+                } catch(err) { console.error("Image upload error", err); }
+            }
+        }
+
+        const insertData = {
+            ma_vt, ten_vt, cau_hinh_1, cau_hinh_2, nganh, group_product,
+            url_hinh_anh: JSON.stringify(uploadedUrls) 
+        };
+
+        const { error } = await sb.from('product').insert(insertData);
+        showLoading(false);
+
+        if (error) {
+            showToast('Lỗi thêm mới: ' + error.message, 'error');
+        } else {
+            showToast('Thêm mới thành công', 'success');
+            closeAddModal();
+            fetchProductData();
+        }
+    };
+}
+
+function renderAddProductPreviews() {
+    const container = document.getElementById('add-prod-img-previews');
+    if (!container) return;
+    
+    container.innerHTML = '';
+    if (addProductFiles.length === 0) {
+        container.innerHTML = '<span class="text-gray-400 text-xs italic w-full text-center pointer-events-none">Khu vực dán ảnh (Ctrl+V) hoặc chọn bên dưới</span>';
+        return;
+    }
+
+    addProductFiles.forEach((file, index) => {
+        const url = URL.createObjectURL(file);
+        const div = document.createElement('div');
+        div.className = 'relative w-16 h-16 border border-gray-300 rounded overflow-hidden group';
+        div.innerHTML = `
+            <img src="${url}" class="w-full h-full object-cover">
+            <button type="button" class="absolute top-0 right-0 bg-red-500 text-white p-0.5 opacity-0 group-hover:opacity-100 transition-opacity rounded-bl" title="Xóa">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        `;
+        div.querySelector('button').onclick = () => {
+            addProductFiles.splice(index, 1);
+            renderAddProductPreviews();
+        };
+        container.appendChild(div);
+    });
+}
+
+function setupImageModalListeners() {
+    const modal = document.getElementById('image-management-modal');
+    const closeBtn = document.getElementById('close-img-modal-btn');
+    const fileInput = document.getElementById('img-modal-file-input');
+    const downloadBtn = document.getElementById('btn-download-all-imgs');
+    const body = document.getElementById('img-modal-body');
+
+    if (!modal) return;
+
+    closeBtn.onclick = () => modal.classList.add('hidden');
+    
+    fileInput.onchange = async (e) => {
+        if (e.target.files.length > 0) {
+            await uploadImages(e.target.files);
+            e.target.value = ''; // Reset
+        }
+    };
+
+    downloadBtn.onclick = downloadAllImages;
+
+    body.addEventListener('paste', async (e) => {
+        const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+        const files = [];
+        for (let index in items) {
+            const item = items[index];
+            if (item.kind === 'file' && item.type.startsWith('image/')) {
+                files.push(item.getAsFile());
+            }
+        }
+        if (files.length > 0) {
+            await uploadImages(files);
+        }
+    });
+}
+
+function openImageManager(rowData) {
+    if (!checkPermission('sua') && !checkPermission('xem')) return;
+    
+    currentManagingProduct = rowData;
+    const modal = document.getElementById('image-management-modal');
+    const title = document.getElementById('img-modal-title');
+    
+    if (!modal) return;
+
+    title.textContent = `${rowData.ten_vt || 'Sản phẩm'} (${rowData.ma_vt})`;
+    renderImageGrid();
+    
+    modal.classList.remove('hidden');
+    document.getElementById('img-modal-body').focus();
+}
+
+function renderImageGrid() {
+    const container = document.getElementById('img-grid');
+    const emptyState = document.getElementById('img-empty-state');
+    
+    if (!container) return;
+    container.innerHTML = '';
+
+    let images = [];
+    try {
+        if (currentManagingProduct.url_hinh_anh) {
+            const raw = currentManagingProduct.url_hinh_anh;
+            if (Array.isArray(raw)) {
+                images = raw;
+            } else if (typeof raw === 'string') {
+                if (raw.startsWith('[')) {
+                    try { images = JSON.parse(raw); } catch(e) { images = [raw]; }
+                } else {
+                    images = [raw];
+                }
+            }
+        }
+    } catch(e) { images = []; }
+
+    if (images.length === 0) {
+        emptyState.classList.remove('hidden');
+        return;
+    } else {
+        emptyState.classList.add('hidden');
+    }
+
+    const canEdit = checkPermission('sua');
+
+    images.forEach((url, index) => {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'group relative aspect-square bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden border dark:border-gray-600 shadow-sm cursor-grab active:cursor-grabbing';
+        wrapper.setAttribute('data-url', url);
+        
+        wrapper.innerHTML = `
+            <img src="${url}" class="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" onclick="window.open('${url}', '_blank')">
+            <div class="absolute top-2 left-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm pointer-events-none">#${index + 1}</div>
+            ${canEdit ? `<button class="btn-delete-img absolute top-2 right-2 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-transform hover:scale-110" data-index="${index}">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>` : ''}
+        `;
+        
+        if (canEdit) {
+            wrapper.querySelector('.btn-delete-img').onclick = (e) => {
+                e.stopPropagation();
+                deleteImage(index);
+            };
+        }
+        
+        container.appendChild(wrapper);
+    });
+
+    if (canEdit) {
+        new Sortable(container, {
+            animation: 150,
+            ghostClass: 'opacity-50',
+            delay: 100, 
+            delayOnTouchOnly: true,
+            onEnd: async (evt) => {
+                if (evt.oldIndex === evt.newIndex) return;
+                
+                const movedItem = images.splice(evt.oldIndex, 1)[0];
+                images.splice(evt.newIndex, 0, movedItem);
+                
+                showLoading(true);
+                const { error } = await sb.from('product').update({ url_hinh_anh: JSON.stringify(images) }).eq('ma_vt', currentManagingProduct.ma_vt);
+                showLoading(false);
+                
+                if (error) {
+                    showToast("Lỗi cập nhật vị trí: " + error.message, 'error');
+                    renderImageGrid();
+                } else {
+                    currentManagingProduct.url_hinh_anh = JSON.stringify(images);
+                    renderImageGrid(); 
+                    fetchProductData(true); 
+                }
+            }
+        });
+    }
+}
+
+async function uploadImages(fileList) {
+    if (!currentManagingProduct || !checkPermission('sua')) return;
+    
+    showLoading(true);
+    const newUrls = [];
+    
+    for (const file of fileList) {
+        try {
+            const safeName = sanitizeFileName(`${currentManagingProduct.ma_vt}-${Date.now()}-${file.name}`);
+            const { data: uploadData, error: uploadError } = await sb.storage.from('hinh_anh').upload(`public/${safeName}`, file);
+            
+            if (!uploadError) {
+                const { data: publicUrlData } = sb.storage.from('hinh_anh').getPublicUrl(`public/${safeName}`);
+                if (publicUrlData) newUrls.push(publicUrlData.publicUrl);
+            }
+        } catch (e) {
+            console.error("Upload fail:", e);
+        }
+    }
+
+    if (newUrls.length > 0) {
+        let existingImages = [];
+        try {
+            const raw = currentManagingProduct.url_hinh_anh;
+            if (Array.isArray(raw)) existingImages = raw;
+            else if (typeof raw === 'string') {
+                if (raw.startsWith('[')) existingImages = JSON.parse(raw);
+                else if(raw) existingImages = [raw];
+            }
+        } catch(e) { existingImages = []; }
+
+        const combined = [...existingImages, ...newUrls];
+        
+        const { error } = await sb.from('product').update({ url_hinh_anh: JSON.stringify(combined) }).eq('ma_vt', currentManagingProduct.ma_vt);
+        
+        if (error) {
+            showToast("Lỗi cập nhật: " + error.message, 'error');
+        } else {
+            currentManagingProduct.url_hinh_anh = JSON.stringify(combined); 
+            renderImageGrid();
+            fetchProductData(true);
+        }
+    }
+    showLoading(false);
+}
+
+async function deleteImage(index) {
+    if (!currentManagingProduct) return;
+    const confirmed = await showConfirm("Bạn có chắc muốn xóa ảnh này?");
+    if (!confirmed) return;
+
+    let existingImages = [];
+    try {
+        const raw = currentManagingProduct.url_hinh_anh;
+        if (Array.isArray(raw)) existingImages = raw;
+        else if (typeof raw === 'string') {
+            if (raw.startsWith('[')) existingImages = JSON.parse(raw);
+            else if(raw) existingImages = [raw];
+        }
+    } catch(e) { return; }
+
+    if (index >= 0 && index < existingImages.length) {
+        existingImages.splice(index, 1);
+        showLoading(true);
+        const { error } = await sb.from('product').update({ url_hinh_anh: JSON.stringify(existingImages) }).eq('ma_vt', currentManagingProduct.ma_vt);
+        showLoading(false);
+
+        if (error) {
+            showToast("Lỗi xóa: " + error.message, 'error');
+        } else {
+            currentManagingProduct.url_hinh_anh = JSON.stringify(existingImages);
+            renderImageGrid();
+            fetchProductData(true);
+        }
+    }
+}
+
+async function downloadAllImages() {
+    if (!currentManagingProduct) return;
+    
+    let images = [];
+    try {
+        const raw = currentManagingProduct.url_hinh_anh;
+        if (Array.isArray(raw)) images = raw;
+        else if (typeof raw === 'string') {
+            if (raw.startsWith('[')) images = JSON.parse(raw);
+            else if(raw) images = [raw];
+        }
+    } catch(e) { return; }
+
+    if (images.length === 0) {
+        showToast("Không có ảnh để tải.", 'info');
+        return;
+    }
+
+    showLoading(true);
+    try {
+        const zip = new JSZip();
+        
+        const promises = images.map(async (url, i) => {
+            try {
+                const response = await fetch(url);
+                const blob = await response.blob();
+                
+                let ext = 'jpg';
+                const type = blob.type;
+                if (type === 'image/png') ext = 'png';
+                else if (type === 'image/jpeg') ext = 'jpg';
+                else if (type === 'image/webp') ext = 'webp';
+                
+                const filename = `hinh_anh_${currentManagingProduct.ma_vt}_${i + 1}.${ext}`;
+                zip.file(filename, blob);
+            } catch(e) { console.error("Fetch error", e); }
+        });
+
+        await Promise.all(promises);
+        
+        const content = await zip.generateAsync({ type: "blob" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(content);
+        link.download = `hinh_anh_${currentManagingProduct.ma_vt}.zip`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+        
+        showToast("Tải xuống hoàn tất.", 'success');
+    } catch (error) {
+        console.error(error);
+        showToast("Lỗi khi tạo file zip.", 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
