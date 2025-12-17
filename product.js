@@ -206,7 +206,7 @@ export function onShowProductView(params = null) {
                     <input type="text" id="product-search" class="w-full pl-8 pr-2 py-1.5 text-xs md:text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-1 focus:ring-blue-500 dark:text-white" data-i18n="search_all_cols" placeholder="Tìm kiếm...">
                 </div>
 
-                <!-- Date Filter Scrollable Area (Mobile Adaptive) -->
+                <!-- Date Filter Scrollable Area -->
                 <div class="flex-1 overflow-x-auto no-scrollbar mx-1 w-full md:w-auto order-3 md:order-2 border-t md:border-t-0 pt-2 md:pt-0 border-gray-200 dark:border-gray-700 md:border-none">
                     <div class="flex items-center gap-1.5 min-w-max">
                         <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap bg-white dark:bg-gray-600 text-blue-600 shadow-sm border border-gray-200 dark:border-gray-500" data-type="all">Tất cả</button>
@@ -671,6 +671,7 @@ function initHandsontable() {
     let pinnedCount = columnSettings.filter(c => c.isVisible && c.isPinned).length;
     const canEdit = checkPermission('sua');
     const canDelete = checkPermission('xoa');
+    const isMobile = window.innerWidth < 768;
 
     hot = new Handsontable(container, {
         data: [], 
@@ -683,7 +684,8 @@ function initHandsontable() {
         stretchH: 'all',
         fixedColumnsLeft: pinnedCount,
         autoRowSize: true, 
-        viewportRowRenderingOffset: 20,
+        viewportRowRenderingOffset: 50, // Increased buffer for smoother scroll
+        viewportColumnRenderingOffset: 20, // Increased buffer for horizontal scroll
         manualColumnResize: true,
         manualRowResize: true,
         contextMenu: canDelete ? ['remove_row', '---------', 'alignment'] : ['alignment'],
@@ -697,6 +699,17 @@ function initHandsontable() {
         licenseKey: 'non-commercial-and-evaluation',
         autoWrapRow: true,
         autoWrapCol: true,
+        
+        // Mobile Selection Logic: Block selecting Read-Only cells
+        beforeOnCellMouseDown: function(event, coords, TD) {
+            if (isMobile && coords.row >= 0 && coords.col >= 0) {
+                const cellMeta = this.getCellMeta(coords.row, coords.col);
+                if (cellMeta.readOnly) {
+                    event.stopImmediatePropagation(); // Block selection
+                    return false;
+                }
+            }
+        },
         
         afterColumnResize: (newSize, column) => {
             const visibleCols = columnSettings.filter(c => c.isVisible);
