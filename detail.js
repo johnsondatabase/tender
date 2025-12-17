@@ -580,7 +580,8 @@ function initHandsontable() {
         stretchH: 'all',
         fixedColumnsLeft: pinnedCount,
         autoRowSize: true, 
-        viewportRowRenderingOffset: 20, 
+        viewportRowRenderingOffset: 50, // Increased buffer
+        viewportColumnRenderingOffset: 20, // Increased horizontal buffer for better sync
         manualColumnResize: true,
         manualRowResize: true,
         contextMenu: true,
