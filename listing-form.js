@@ -130,29 +130,15 @@ export function addMaterialRow() {
 window.updateMaterial = function(index, field, value) {
     if(currentMaterials[index]) {
         // --- VALIDATION: Mã VT ---
-        // Chỉ chấp nhận nếu có trong productCodes
         if (field === 'ma_vt' && value && value.trim() !== '') {
-            if (productCodes.length > 0 && !productCodes.includes(value)) {
-                showToast(`Mã vật tư "${value}" không hợp lệ (không tồn tại).`, 'error');
-                
-                // Clear input UI
-                const inputEl = document.getElementById(`mat-input-${index}`);
-                if (inputEl) inputEl.value = '';
-                
-                // Don't update state with invalid value, treat as empty
-                value = ''; 
-            }
+            // Allow typing, validation happens on save or blur if needed
         }
-        // -------------------------
-
         currentMaterials[index][field] = value;
-        
-        // Auto-fill SL Trung when Quota changes
         if (field === 'quota') {
              currentMaterials[index]['sl_trung'] = value;
-             renderMaterialList(isReadOnlyMode); // Re-render to calculate sums
+             renderMaterialList(isReadOnlyMode);
         } else if (field === 'sl_trung') {
-             renderMaterialList(isReadOnlyMode); // Re-render for total
+             renderMaterialList(isReadOnlyMode);
         }
     }
 };
@@ -165,13 +151,10 @@ window.removeMaterial = function(index) {
 // --- Autocomplete & Data Fetching ---
 
 async function fetchAuxiliaryData() {
-    // Fetch Provinces
     if (provinceData.length === 0) {
         const { data } = await sb.from('tinh_thanh').select('tinh, khu_vuc');
         if (data) provinceData = data;
     }
-    
-    // Fetch Products for Autocomplete
     if (productCodes.length === 0) {
         const { data } = await sb.from('product').select('ma_vt');
         if (data) productCodes = data.map(p => p.ma_vt);
@@ -179,9 +162,8 @@ async function fetchAuxiliaryData() {
 }
 
 function setupAutocompletes(data) {
-    // Exclude 'nha_phan_phoi' from automatic data extraction, we use PREDEFINED_NPP
     const fields = [
-        { key: 'benh_vien', inputId: 'l-benh-vien', listId: 'list-benh-vien' },
+        { key: 'benh_vien', inputId: 'l-benh-vien', listId: 'list-benh-vien', onSelect: handleHospitalChange }, // Attached handler
         { key: 'loai', inputId: 'l-loai', listId: 'list-loai' },
         { key: 'nganh', inputId: 'l-nganh', listId: 'list-nganh' },
         { key: 'psr', inputId: 'l-psr', listId: 'list-psr' },
@@ -190,15 +172,34 @@ function setupAutocompletes(data) {
 
     fields.forEach(field => {
         const uniqueValues = [...new Set(data.map(item => item[field.key]).filter(v => v && v.trim() !== ''))].sort();
-        setupSingleAutocomplete(field.inputId, field.listId, uniqueValues);
+        setupSingleAutocomplete(field.inputId, field.listId, uniqueValues, field.onSelect);
     });
     
-    // Setup Province Autocomplete manually from provinceData
     const provinces = [...new Set(provinceData.map(p => p.tinh))].sort();
     setupSingleAutocomplete('l-tinh', 'list-tinh', provinces);
-
-    // Setup NPP Autocomplete with PREDEFINED list
     setupSingleAutocomplete('l-npp', 'list-npp', PREDEFINED_NPP);
+}
+
+// Logic to load Departments (Khoa) based on Hospital
+async function handleHospitalChange(hospitalName) {
+    generateMaThau(); // Regenerate code
+    
+    if(!hospitalName) return;
+    
+    // Fetch unique 'khoa' from 'detail' table for this hospital
+    // Optimization: In a real app with huge data, this should be cached or have a dedicated table
+    const { data } = await sb.from('detail')
+        .select('khoa')
+        .eq('benh_vien', hospitalName);
+        
+    if (data && data.length > 0) {
+        const uniqueKhoas = [...new Set(data.map(d => d.khoa).filter(k => k && k.trim() !== ''))].sort();
+        setupSingleAutocomplete('l-khoa', 'list-khoa', uniqueKhoas);
+    } else {
+        // Clear list if no data
+        const list = document.getElementById('list-khoa');
+        if(list) list.innerHTML = '';
+    }
 }
 
 // Updated Helper: Added optional onSelect callback and isSelectionEvent logic
@@ -207,13 +208,26 @@ function setupSingleAutocomplete(inputId, listId, values, onSelect = null) {
     const list = document.getElementById(listId);
     if (!input || !list) return;
 
-    let isSelectionEvent = false; // Flag to prevent re-opening on selection
+    let isSelectionEvent = false; 
+    // IMPORTANT: Move dropdown to body for z-index, but manage position carefully
+    if (!list.dataset.moved) {
+        list.dataset.moved = '1';
+        document.body.appendChild(list);
+        list.style.position = 'absolute';
+        list.style.zIndex = 12000;
+        
+        // CSS Styles for wrapping and fitting width
+        list.style.boxSizing = 'border-box';
+        list.style.whiteSpace = 'normal'; 
+        list.style.overflowWrap = 'break-word';
+        list.style.wordBreak = 'break-word';
+    }
 
     const renderList = (filterText = '') => {
         if(isReadOnlyMode) return;
         const lowerFilter = filterText.toLowerCase();
         
-        // Filter and limit to 100 items for performance
+        // Filter and limit to 50 items for performance
         const filtered = values.filter(v => v.toLowerCase().includes(lowerFilter));
         
         if (filtered.length === 0) {
@@ -221,75 +235,104 @@ function setupSingleAutocomplete(inputId, listId, values, onSelect = null) {
             return;
         }
         
-        const safeLimit = 100;
+        const safeLimit = 50; 
         const itemsToRender = filtered.slice(0, safeLimit);
 
-        list.innerHTML = itemsToRender.map(val => `<li class="custom-dropdown-item">${val}</li>`).join('');
+        list.innerHTML = itemsToRender.map(val => `<li class="custom-dropdown-item py-2 px-3 border-b border-gray-100 last:border-0 hover:bg-gray-100 dark:hover:bg-gray-600 cursor-pointer text-sm">${val}</li>`).join('');
         list.classList.add('show');
+        
+        // Position logic
+        const rect = input.getBoundingClientRect();
+        
+        // STRICT WIDTH: Match input width exactly
+        list.style.width = rect.width + 'px';
+        
+        const listHeight = list.offsetHeight;
+        const spaceBelow = window.innerHeight - rect.bottom;
+        let top;
+        
+        if (spaceBelow < listHeight + 20 && rect.top > listHeight + 20) {
+            top = rect.top - listHeight - 4; // Above
+        } else {
+            top = rect.bottom + 4; // Below
+        }
+        
+        list.style.left = (rect.left + window.scrollX) + 'px';
+        list.style.top = (top + window.scrollY) + 'px';
         
         list.querySelectorAll('li').forEach(li => {
             li.addEventListener('mousedown', (e) => {
-                e.preventDefault(); // Prevent input blur before click is registered
-                
-                isSelectionEvent = true; // Set flag
-                
+                e.preventDefault(); 
+                isSelectionEvent = true; 
                 input.value = li.textContent;
-                list.classList.remove('show'); // Force hide
-                
-                input.dispatchEvent(new Event('input')); // Trigger data binding
-                
+                list.classList.remove('show'); 
+                input.dispatchEvent(new Event('input')); 
                 if(onSelect) onSelect(input.value);
-                
-                // Reset flag after a minimal delay to allow event propagation to finish
                 setTimeout(() => { isSelectionEvent = false; }, 100);
             });
         });
     };
 
-    input.onfocus = () => {
-        // Only show if not just selected
-        if (!isSelectionEvent) renderList(input.value);
+    input.onfocus = () => { if (!isSelectionEvent) renderList(input.value); };
+    input.oninput = () => { if (!isSelectionEvent) renderList(input.value); };
+    input.onblur = () => { 
+        setTimeout(() => list.classList.remove('show'), 150); 
+        
+        // SMART AUTO-CORRECT Logic
+        setTimeout(() => {
+            if (isSelectionEvent) return;
+            const val = input.value.trim();
+            if (!val) return;
+
+            // 1. Exact match - do nothing
+            const exact = values.find(v => v.toLowerCase() === val.toLowerCase());
+            if (exact) {
+                if (input.value !== exact) input.value = exact; // Fix casing
+                return;
+            }
+
+            // 2. Fuzzy match (contains)
+            const lowerVal = val.toLowerCase();
+            const match = values.find(v => v.toLowerCase().includes(lowerVal));
+            
+            if (match) {
+                if (match !== input.value) {
+                    input.value = match;
+                    input.dispatchEvent(new Event('input')); // Trigger dependent logic like ID gen
+                    if(onSelect) onSelect(match);
+                }
+            }
+        }, 200);
     };
     
-    input.oninput = () => {
-        // If this input event was triggered by selection code, DO NOT re-render list
-        if (!isSelectionEvent) {
-            renderList(input.value);
-        }
-    };
-    
-    input.onblur = () => { setTimeout(() => list.classList.remove('show'), 150); };
-    
-    // Logic auto-fill Khu vuc based on Tinh (Only for Main Form)
     if (inputId === 'l-tinh') {
         input.addEventListener('input', () => {
             const val = input.value;
             const found = provinceData.find(p => p.tinh === val);
-            if (found) {
-                document.getElementById('l-khu-vuc').value = found.khu_vuc || '';
-            }
+            if (found) document.getElementById('l-khu-vuc').value = found.khu_vuc || '';
         });
     }
-    
     if (inputId === 'l-benh-vien') {
-        input.addEventListener('input', generateMaThau);
+        // Special handler for Hospital to trigger Code generation and Khoa loading
+        input.addEventListener('input', (e) => {
+             // Debounce slightly if needed, but direct call is ok for now
+             handleHospitalChange(e.target.value); 
+        });
     }
 }
 
-// --- Main Modal Functions ---
+// ... (Rest of Listing Modal logic unchanged) ...
 
 export async function openListingModal(item = null, readOnly = false, isPreFill = false) {
     const modal = document.getElementById('listing-modal');
     
-    // Updated HTML Structure: 
-    // 1. Mobile view: main container overflows y, inner parts height auto.
-    // 2. Desktop view: main container overflow hidden, inner parts scroll independently.
-    // 3. Total Header moved to top of material section.
-    // 4. Modal Header has ID for dragging.
-    
     document.getElementById('listing-modal-content').innerHTML = `
         <div id="listing-modal-header" class="p-3 md:p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700 rounded-t-xl cursor-move select-none flex-shrink-0">
-            <h3 id="listing-modal-title" class="text-base md:text-lg font-bold text-gray-800 dark:text-white" data-i18n="modal_add_title">Thêm Mới Thầu</h3>
+            <div class="flex items-center">
+                <h3 id="listing-modal-title" class="text-base md:text-lg font-bold text-gray-800 dark:text-white" data-i18n="modal_add_title">Thêm Mới Thầu</h3>
+                <!-- Dynamic Code Display -->
+                <span id="modal-title-code" class="ml-2 text-sm font-mono font-bold"></span>
+            </div>
             <div class="flex items-center gap-2">
                 <button onclick="window.viewListingHistory()" class="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400 p-1" title="Xem lịch sử">
                      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -303,17 +346,14 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
              <input type="hidden" id="listing-id">
              <input type="hidden" id="l-status" value="Listing">
              
+             <!-- Hidden Inputs, including Ma Thau now -->
              <div class="hidden">
-                 <input type="number" id="l-nam">
-                 <input type="date" id="l-ngay">
-                 <input type="text" id="l-ma-thau">
+                <input type="number" id="l-nam">
+                <input type="date" id="l-ngay">
+                <input type="text" id="l-ma-thau">
              </div>
 
-             <!-- MOBILE LAYOUT FIX: Parent scrolls on mobile, Children scroll on Desktop -->
              <div class="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden bg-white dark:bg-gray-800">
-                 
-                 <!-- SECTION 1: INPUTS -->
-                 <!-- Mobile: h-auto (expand), no internal scroll. Desktop: h-full, scrollable -->
                  <div class="w-full md:w-2/3 p-4 md:p-6 md:overflow-y-auto custom-scrollbar border-b md:border-b-0 md:border-r dark:border-gray-700 flex flex-col gap-4 flex-shrink-0 md:flex-shrink h-auto md:h-full">
                      <div class="grid grid-cols-6 gap-3 md:gap-4">
                         <div class="col-span-4 relative group input-wrapper">
@@ -321,10 +361,14 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
                              <input type="text" id="l-benh-vien" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
                              <ul id="list-benh-vien" class="custom-dropdown-list custom-scrollbar"></ul>
                         </div>
+                        
+                        <!-- Updated Khoa Input with Dropdown -->
                         <div class="col-span-2 relative group input-wrapper">
                              <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_department">Khoa</label>
                              <input type="text" id="l-khoa" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                             <ul id="list-khoa" class="custom-dropdown-list custom-scrollbar"></ul>
                         </div>
+                        
                         <div class="col-span-3 relative group input-wrapper">
                             <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_province">Tỉnh</span> <span class="text-red-500">*</span></label>
                             <input type="text" id="l-tinh" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
@@ -339,21 +383,11 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
                             <input type="text" id="l-loai" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
                             <ul id="list-loai" class="custom-dropdown-list custom-scrollbar"></ul>
                         </div>
-                        
-                        <!-- Nhà Phân Phối với nút Add -->
                          <div class="col-span-3 relative group input-wrapper">
                             <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1"><span data-i18n="lbl_distributor">Nhà Phân Phối</span> <span class="text-red-500">*</span></label>
-                            <div class="flex gap-1">
-                                <div class="relative flex-1">
-                                    <input type="text" id="l-npp" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
-                                    <ul id="list-npp" class="custom-dropdown-list custom-scrollbar"></ul>
-                                </div>
-                                <button type="button" id="btn-add-npp" class="px-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-600 dark:hover:bg-gray-500 border border-gray-300 dark:border-gray-500 rounded text-gray-600 dark:text-gray-200" title="Thêm NPP khác">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                                </button>
-                            </div>
+                            <input type="text" id="l-npp" required class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
+                            <ul id="list-npp" class="custom-dropdown-list custom-scrollbar"></ul>
                         </div>
-
                         <div class="col-span-3">
                             <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_signed_date">Ngày Ký</label>
                             <input type="date" id="l-ngay-ky" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
@@ -367,13 +401,11 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
                             <input type="text" id="l-nganh" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
                             <ul id="list-nganh" class="custom-dropdown-list custom-scrollbar"></ul>
                         </div>
-                        
                         <div id="psr-container" class="col-span-3 relative group input-wrapper">
                              <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_psr">PSR</label>
                              <input type="text" id="l-psr" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
                              <ul id="list-psr" class="custom-dropdown-list custom-scrollbar"></ul>
                         </div>
-                        
                         <div class="col-span-3 relative group input-wrapper">
                             <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_manager">Quản Lý</label>
                             <input type="text" id="l-quan-ly" class="w-full px-2 py-1.5 md:px-3 md:py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" autocomplete="off">
@@ -391,37 +423,19 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
                      <div id="file-list-container" class="space-y-2 mt-4"></div>
                  </div>
                  
-                 <!-- SECTION 2: MATERIALS -->
-                 <!-- Mobile: h-auto (expand). Desktop: h-full, scrollable independently -->
                  <div class="w-full md:w-1/3 bg-gray-50 dark:bg-gray-900/50 p-4 md:p-6 flex flex-col h-auto md:h-full border-t md:border-t-0 flex-shrink-0">
                     <div class="flex justify-between items-center mb-3 flex-shrink-0">
                         <h4 class="font-bold text-gray-700 dark:text-gray-200">Danh sách vật tư</h4>
-                        <button type="button" id="btn-add-material" class="text-xs px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center">
-                            <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Thêm
-                        </button>
+                        <button type="button" id="btn-add-material" class="text-xs px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Thêm</button>
                     </div>
-                    
                     <div class="bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 flex-1 flex flex-col overflow-hidden relative h-auto md:h-full">
-                        
-                        <!-- TOTAL HEADER (Moved to top) -->
-                        <div id="material-total-header" class="bg-gray-100 dark:bg-gray-800 border-b dark:border-gray-700 p-2 flex justify-between items-center shadow-sm z-20">
-                            <!-- Injected by JS -->
-                        </div>
-
-                        <!-- SCROLLABLE PART -->
-                        <!-- Mobile: No internal scroll (expand). Desktop: Scroll internal -->
+                        <div id="material-total-header" class="bg-gray-100 dark:bg-gray-800 border-b dark:border-gray-700 p-2 flex justify-between items-center shadow-sm z-20"></div>
                         <div class="md:flex-1 md:overflow-y-auto custom-scrollbar">
                              <table class="w-full text-sm text-left">
                                 <thead class="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 uppercase text-[10px] sticky top-0 z-10 shadow-sm">
-                                    <tr>
-                                        <th class="px-2 py-2 pl-3">Mã VT</th>
-                                        <th class="px-1 py-2 w-20 text-center">Quota</th>
-                                        <th class="px-1 py-2 w-20 text-center">Trúng</th>
-                                        <th class="px-1 py-2 w-8"></th>
-                                    </tr>
+                                    <tr><th class="px-2 py-2 pl-3">Mã VT</th><th class="px-1 py-2 w-20 text-center">Quota</th><th class="px-1 py-2 w-20 text-center">Trúng</th><th class="px-1 py-2 w-8"></th></tr>
                                 </thead>
-                                <tbody id="material-list-body" class="divide-y divide-gray-200 dark:divide-gray-700">
-                                </tbody>
+                                <tbody id="material-list-body" class="divide-y divide-gray-200 dark:divide-gray-700"></tbody>
                             </table>
                             <div id="empty-material-msg" class="p-4 text-center text-gray-400 text-xs italic hidden">Chưa có vật tư nào.</div>
                         </div>
@@ -429,7 +443,6 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
                  </div>
              </div>
              
-             <!-- Footer -->
              <div class="flex-none border-t dark:border-gray-700 bg-white dark:bg-gray-800 p-3 md:p-4 flex justify-end gap-3 z-20">
                 <button type="button" onclick="window.closeListingModal()" class="px-3 py-1.5 md:px-4 md:py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 font-medium" data-i18n="btn_cancel">Hủy</button>
                 <button type="submit" id="btn-save-listing" class="px-4 py-1.5 md:px-6 md:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md font-medium" data-i18n="btn_save">Lưu</button>
@@ -438,7 +451,6 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
         <div id="modal-resize-handle" class="resizer hidden md:block"></div>
     `;
 
-    // Re-initialize internal listeners since HTML was replaced
     const btnAddMaterial = document.getElementById('btn-add-material');
     if (btnAddMaterial) btnAddMaterial.addEventListener('click', addMaterialRow);
     const fileInput = document.getElementById('file-upload-input');
@@ -446,30 +458,16 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
     const hospitalInput = document.getElementById('l-benh-vien');
     if (hospitalInput) hospitalInput.addEventListener('input', generateMaThau);
     
-    // Add NPP "+" button listener
-    const btnAddNpp = document.getElementById('btn-add-npp');
-    if (btnAddNpp) {
-        btnAddNpp.onclick = () => {
-            const input = document.getElementById('l-npp');
-            input.value = '';
-            input.focus();
-            // Close dropdown if open
-            const list = document.getElementById('list-npp');
-            if(list) list.classList.remove('show');
-        };
-    }
+    // Removed add NPP button logic
 
-    // Initialize Draggable Logic
     initDraggableModal();
-
-    // --- Data Fetching ---
     await fetchAuxiliaryData();
 
-    // --- Init Variables ---
     const form = document.getElementById('listing-form');
     const title = document.getElementById('listing-modal-title');
     const btnSave = document.getElementById('btn-save-listing');
     const btnUploadLabel = document.getElementById('btn-upload-label');
+    const titleCodeSpan = document.getElementById('modal-title-code'); // Get the code span
     
     isReadOnlyMode = readOnly;
     form.reset();
@@ -478,14 +476,13 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
     currentMaterials = [];
     originalMaThau = null;
     
-    // Setup Autocompletes
     if (window.getListingsCache) {
         setupAutocompletes(window.getListingsCache());
     }
 
-    // --- Populate Data ---
     if (item) {
         title.textContent = readOnly ? t('nav_detail') : (isPreFill ? t('modal_add_title') : t('modal_edit_title'));
+        if(titleCodeSpan) titleCodeSpan.textContent = ` - ${item.ma_thau || ''}`; // Set code in title
         
         if (!isPreFill) {
             document.getElementById('listing-id').value = item.id || item.ma_thau;
@@ -511,6 +508,9 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
         document.getElementById('l-quan-ly').value = item.quan_ly || '';
         document.getElementById('l-status').value = item.tinh_trang || 'Listing';
         
+        // Trigger Department Load if Hospital is set
+        if (item.benh_vien) handleHospitalChange(item.benh_vien);
+
         try {
              if(item.files && !isPreFill) {
                  const files = typeof item.files === 'string' ? JSON.parse(item.files) : (item.files || []);
@@ -535,34 +535,28 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
         }
 
     } else {
-        // Fresh Add
         title.textContent = t('modal_add_title');
+        if(titleCodeSpan) titleCodeSpan.textContent = '';
         document.getElementById('listing-id').value = '';
-        document.getElementById('l-status').value = 'Listing'; // Default status Listing
+        document.getElementById('l-status').value = 'Listing';
         
         const now = new Date();
         document.getElementById('l-nam').value = now.getFullYear();
         document.getElementById('l-ngay').value = now.toISOString().split('T')[0];
     }
 
-    // --- PSR Logic Handling ---
     const psrInput = document.getElementById('l-psr');
     const psrContainer = document.getElementById('psr-container');
 
     if (currentUser.phan_quyen === 'View') {
-        // Nếu là View: Auto fill tên và ẩn container
         psrInput.value = currentUser.ho_ten;
         if(psrContainer) psrContainer.classList.add('hidden');
     } else {
-        // Admin hoặc User
         if (!item && !isPreFill) { 
-            // Nếu là form Thêm mới tinh: Auto fill tên
             psrInput.value = currentUser.ho_ten;
         }
-        // Hiển thị để sửa
         if(psrContainer) psrContainer.classList.remove('hidden');
     }
-    // ---------------------------
 
     renderMaterialList(readOnly);
 
@@ -576,7 +570,7 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
         btnSave.classList.remove('hidden');
         btnUploadLabel.classList.remove('hidden');
         if(btnAddMaterial) btnAddMaterial.classList.remove('hidden');
-        document.getElementById('l-khu-vuc').disabled = true; // Khu vuc always readonly as it auto-fills
+        document.getElementById('l-khu-vuc').disabled = true;
     }
 
     initialFormState = getFormState();
@@ -597,7 +591,6 @@ export async function closeListingModal(force = false) {
 
 export async function saveListing(e) {
     e.preventDefault();
-    showLoading(true);
 
     const formData = {
         ma_thau: document.getElementById('l-ma-thau').value,
@@ -617,6 +610,44 @@ export async function saveListing(e) {
         tinh_trang: document.getElementById('l-status').value,
         files: currentFiles
     };
+
+    // --- Validation: Materials ---
+    if (currentMaterials.length === 0) {
+        showToast('Danh sách vật tư không được để trống.', 'error');
+        return;
+    }
+
+    // Check for empty Ma VT or empty/zero Quota
+    const invalidMaterial = currentMaterials.find(m => 
+        !m.ma_vt || m.ma_vt.trim() === '' || 
+        !m.quota || parseFloat(m.quota) <= 0
+    );
+
+    if (invalidMaterial) {
+        showToast('Vui lòng nhập đầy đủ Mã VT và Số lượng (Quota > 0) cho tất cả các dòng.', 'error');
+        return;
+    }
+
+    showLoading(true);
+
+    // --- Validation: Duplicate ID for New Listings ---
+    if (!originalMaThau) {
+        let currentId = formData.ma_thau;
+        const { count, error } = await sb.from('listing').select('ma_thau', { count: 'exact', head: true }).eq('ma_thau', currentId);
+        
+        if (count > 0) {
+            showLoading(false);
+            showToast(`Mã thầu "${currentId}" đã tồn tại. Vui lòng kiểm tra lại.`, 'error');
+            
+            // Update visual indicator
+            const titleCodeSpan = document.getElementById('modal-title-code');
+            if(titleCodeSpan) {
+                titleCodeSpan.className = "ml-2 text-sm font-mono font-bold text-red-500";
+                titleCodeSpan.title = "Mã thầu đã tồn tại";
+            }
+            return;
+        }
+    }
 
     let changeLog = [];
     let actionType = "Tạo mới";
@@ -757,11 +788,8 @@ export async function saveListing(e) {
     if (window.fetchListings) await window.fetchListings();
 }
 
-// --- Utils ---
-
 export function handleFileUpload(files) {
     if (!files || files.length === 0) return;
-    
     Array.from(files).forEach(file => {
         const mockUrl = URL.createObjectURL(file);
         currentFiles.push({
@@ -790,25 +818,19 @@ export function handlePaste(e) {
 export function renderFileList(readOnly) {
     const container = document.getElementById('file-list-container');
     container.innerHTML = '';
-    
     currentFiles.forEach((file, index) => {
         const div = document.createElement('div');
         div.className = 'flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded border border-gray-200 dark:border-gray-600';
-        
         let icon = '<svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>';
         if (file.type && file.type.startsWith('image/')) {
             icon = `<img src="${file.url}" class="w-8 h-8 object-cover rounded">`;
         }
-
         div.innerHTML = `
             <div class="flex items-center gap-2 overflow-hidden">
                 ${icon}
                 <a href="${file.url}" target="_blank" class="text-sm text-blue-600 dark:text-blue-400 hover:underline truncate">${file.name}</a>
             </div>
-            ${!readOnly ? `
-            <button type="button" class="text-red-500 hover:text-red-700 p-1" onclick="window.removeFile(${index})">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-            </button>` : ''}
+            ${!readOnly ? `<button type="button" class="text-red-500 hover:text-red-700 p-1" onclick="window.removeFile(${index})"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>` : ''}
         `;
         container.appendChild(div);
     });
@@ -819,23 +841,40 @@ window.removeFile = function(index) {
     renderFileList(isReadOnlyMode);
 };
 
-export function generateMaThau() {
+export async function generateMaThau() {
     if(isReadOnlyMode) return;
     const dateVal = document.getElementById('l-ngay').value;
     const hospitalVal = document.getElementById('l-benh-vien').value;
     const maThauInput = document.getElementById('l-ma-thau');
+    const titleCodeSpan = document.getElementById('modal-title-code');
+
     if (dateVal && hospitalVal) {
         const [year, month, day] = dateVal.split('-');
         const dateStr = `${day}${month}${year}`;
-        const getAcronym = (str) => {
-            return str.trim().replace(/đ/g, 'd').replace(/Đ/g, 'D').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9\s]/g, '').split(/\s+/).filter(word => word.length > 0).map(word => word.charAt(0)).join('').toUpperCase();
-        };
+        const getAcronym = (str) => str.trim().replace(/đ/g, 'd').replace(/Đ/g, 'D').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9\s]/g, '').split(/\s+/).filter(word => word.length > 0).map(word => word.charAt(0)).join('').toUpperCase();
         const hospitalCode = getAcronym(hospitalVal);
-        if (dateStr && hospitalCode) maThauInput.value = `${dateStr}-${hospitalCode}`;
+        if (dateStr && hospitalCode) {
+            const newCode = `${dateStr}-${hospitalCode}`;
+            maThauInput.value = newCode;
+            
+            if(titleCodeSpan) {
+                titleCodeSpan.textContent = ` - ${newCode}`;
+                
+                // Validate if code exists (Red if exists, Green if new)
+                const { count } = await sb.from('listing').select('ma_thau', { count: 'exact', head: true }).eq('ma_thau', newCode);
+                
+                if (count > 0 && originalMaThau !== newCode) {
+                    titleCodeSpan.className = "ml-2 text-sm font-mono font-bold text-red-500";
+                    titleCodeSpan.title = "Mã thầu đã tồn tại";
+                } else {
+                    titleCodeSpan.className = "ml-2 text-sm font-mono font-bold text-green-500";
+                    titleCodeSpan.title = "Mã thầu hợp lệ";
+                }
+            }
+        }
     }
 }
 
-// Function to make modal draggable and resizable
 function initDraggableModal() {
     const modal = document.getElementById('listing-modal-content');
     const header = document.getElementById('listing-modal-header');
@@ -846,19 +885,14 @@ function initDraggableModal() {
     let startX, startY, initialLeft, initialTop;
 
     header.onmousedown = (e) => {
-        if(window.innerWidth < 768) return; // Disable drag on mobile
-        // Only allow left mouse button
+        if(window.innerWidth < 768) return;
         if (e.button !== 0) return;
-        
         isDragging = true;
         startX = e.clientX;
         startY = e.clientY;
-        
         const rect = modal.getBoundingClientRect();
         initialLeft = rect.left;
         initialTop = rect.top;
-        
-        // Reset styles to allow absolute positioning drag
         modal.style.margin = '0';
         modal.style.transform = 'none';
         modal.style.left = initialLeft + 'px';
@@ -880,7 +914,6 @@ function initDraggableModal() {
         };
     };
     
-    // Resizable Logic
     const resizer = document.getElementById('modal-resize-handle');
     if(resizer) {
         resizer.onmousedown = (e) => {

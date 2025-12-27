@@ -246,25 +246,58 @@ export async function updateListingStatus(maThau, newStatus, silent = false) {
     if (!silent) showLoading(true);
     let error = null;
 
-    const { error: listingError } = await sb.from('listing').update({ tinh_trang: newStatus }).eq('ma_thau', maThau); 
-    if (listingError) error = listingError;
-    else {
-        if (newStatus === 'Fail') {
-             const { error: detError } = await sb.from('detail').update({ tinh_trang: newStatus, sl_trung: 0 }).eq('ma_thau', maThau);
-             if(detError) error = detError;
-        } else if (newStatus === 'Waiting') {
-             const { data: details } = await sb.from('detail').select('*').eq('ma_thau', maThau);
-             if (details && details.length > 0) {
-                 const updates = details.map(d => ({ ...d, tinh_trang: newStatus, sl_trung: d.quota }));
-                 const { error: upsertError } = await sb.from('detail').upsert(updates);
-                 if(upsertError) error = upsertError;
-             }
-        } else {
-             const { error: detError } = await sb.from('detail').update({ tinh_trang: newStatus }).eq('ma_thau', maThau);
-             if(detError) error = detError;
+    // If changing to Waiting (submission), show confirmation modal to enter submission details
+    if (newStatus === 'Waiting' && !silent) {
+        try {
+            const submitResult = await showSubmitModal(maThau);
+            // If user cancelled modal, abort
+            if (!submitResult || submitResult.cancelled) {
+                if (!silent) showLoading(false);
+                return;
+            }
+            // Apply updates: set listing status and optional dates
+            const listingUpdate = { tinh_trang: newStatus };
+            if (submitResult.ngay_ky) listingUpdate.ngay_ky = submitResult.ngay_ky;
+            if (submitResult.ngay_ket_thuc) listingUpdate.ngay_ket_thuc = submitResult.ngay_ket_thuc;
+
+            const { error: listingError } = await sb.from('listing').update(listingUpdate).eq('ma_thau', maThau);
+            if (listingError) error = listingError;
+            else {
+                // Update details with submitted quantities and status
+                // submitResult.materials = [{ma_vt, submitted}]
+                const { data: details } = await sb.from('detail').select('*').eq('ma_thau', maThau);
+                if (details && details.length > 0) {
+                    const updates = details.map(d => {
+                        const found = submitResult.materials.find(m => m.ma_vt === d.ma_vt);
+                        return {
+                            ...d,
+                            tinh_trang: newStatus,
+                            sl_trung: found ? (found.submitted || 0) : 0
+                        };
+                    });
+                    const { error: upsertError } = await sb.from('detail').upsert(updates);
+                    if (upsertError) error = upsertError;
+                }
+            }
+        } catch (e) {
+            console.error(e);
+            error = e;
+        }
+    } else {
+        // Default behavior for other statuses
+        const { error: listingError } = await sb.from('listing').update({ tinh_trang: newStatus }).eq('ma_thau', maThau);
+        if (listingError) error = listingError;
+        else {
+            if (newStatus === 'Fail') {
+                 const { error: detError } = await sb.from('detail').update({ tinh_trang: newStatus, sl_trung: 0 }).eq('ma_thau', maThau);
+                 if(detError) error = detError;
+            } else {
+                 const { error: detError } = await sb.from('detail').update({ tinh_trang: newStatus }).eq('ma_thau', maThau);
+                 if(detError) error = detError;
+            }
         }
     }
-    
+
     if (!silent) showLoading(false);
     
     if (error) {
@@ -292,6 +325,134 @@ async function deleteListing(maThau) {
             await fetchListings();
         }
     }
+}
+
+// Show submission modal for changing status to Waiting
+async function showSubmitModal(maThau) {
+    return new Promise(async (resolve) => {
+        // Create modal container
+        const modalId = 'submit-transition-modal';
+        let modal = document.getElementById(modalId);
+        if (modal) modal.remove();
+
+        modal = document.createElement('div');
+        modal.id = modalId;
+        modal.className = 'fixed inset-0 z-[11000] flex items-center justify-center modal-backdrop p-4';
+        // Use same style structure as Win confirmation to keep UI consistent
+        modal.innerHTML = `
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
+                <div class="p-4 border-b dark:border-gray-700 bg-green-50 dark:bg-green-900/30 flex justify-between items-start">
+                    <div>
+                        <h3 class="text-lg font-bold text-green-800 dark:text-green-300">Xác nhận Nộp Thầu</h3>
+                        <p class="text-sm text-green-600 dark:text-green-400 mt-1">Cập nhật thông tin chi tiết trước khi hoàn tất.</p>
+                    </div>
+                    <button id="submit-close-x" class="text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded ml-4">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </div>
+                <div class="p-4 max-h-[60vh] overflow-y-auto">
+                    <div class="mb-3 flex items-center gap-6">
+                        <label class="inline-flex items-center gap-2"><input type="radio" name="submit-type" value="full" checked class="w-4 h-4 text-green-600"> <span class="text-sm font-medium">Nộp toàn phần</span></label>
+                        <label class="inline-flex items-center gap-2"><input type="radio" name="submit-type" value="partial" class="w-4 h-4 text-green-600"> <span class="text-sm font-medium">Nộp 1 phần</span></label>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày Ký</label>
+                            <input type="date" id="submit-ngay-ky" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày Kết Thúc</label>
+                            <input type="date" id="submit-ngay-kt" class="w-full px-3 py-2 border rounded dark:bg-gray-700 dark:border-gray-600">
+                        </div>
+                    </div>
+
+                    <div id="submit-materials-wrapper" class="hidden">
+                        <div class="mb-2 font-semibold text-sm text-gray-700 dark:text-gray-200">Điều chỉnh số lượng nộp:</div>
+                        <div>
+                            <table class="w-full text-sm text-left">
+                                <thead class="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-200 sticky top-0">
+                                    <tr><th class="px-2 py-2">Mã VT</th><th class="px-2 py-2 text-right">Quota</th><th class="px-2 py-2 text-right">SL nộp</th></tr>
+                                </thead>
+                                <tbody id="submit-materials-body" class="bg-white dark:bg-gray-800"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 border-t dark:border-gray-700 flex justify-end gap-3 bg-gray-50 dark:bg-gray-800">
+                    <button id="submit-cancel-btn" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50">Hủy bỏ</button>
+                    <button id="submit-confirm-btn" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700">Lưu & Hoàn Tất</button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Load detail rows for this listing
+        const { data: details, error } = await sb.from('detail').select('ma_vt, quota, sl_trung').eq('ma_thau', maThau);
+        const body = modal.querySelector('#submit-materials-body');
+        if (error || !body) {
+            resolve({ cancelled: true });
+            modal.remove();
+            return;
+        }
+
+        // Populate rows
+        details.forEach((d, idx) => {
+            const q = d.quota || 0;
+            const defaultSl = d.sl_trung || (q);
+            const tr = document.createElement('tr');
+            tr.innerHTML = `<td class="px-2 py-2">${d.ma_vt}</td><td class="px-2 py-2 text-right">${Number(q).toLocaleString()}</td><td class="px-2 py-2 text-right"><input type="number" data-vt="${d.ma_vt}" value="${defaultSl}" class="w-24 text-right px-2 py-1 border rounded"></td>`;
+            body.appendChild(tr);
+        });
+
+        const cancelBtn = modal.querySelector('#submit-cancel-btn');
+        const confirmBtn = modal.querySelector('#submit-confirm-btn');
+        const typeInputs = modal.querySelectorAll('input[name="submit-type"]');
+
+        // Toggle materials section visibility depending on selection
+        const materialsWrapper = modal.querySelector('#submit-materials-wrapper');
+        const setMaterialsVisibility = () => {
+            const selectedType = Array.from(typeInputs).find(i => i.checked)?.value || 'full';
+            if (materialsWrapper) materialsWrapper.classList.toggle('hidden', selectedType !== 'partial');
+        };
+        typeInputs.forEach(i => i.addEventListener('change', setMaterialsVisibility));
+        // initial
+        setMaterialsVisibility();
+
+        cancelBtn.onclick = () => {
+            modal.remove();
+            resolve({ cancelled: true });
+        };
+        // Close X behavior
+        const closeX = modal.querySelector('#submit-close-x');
+        if (closeX) closeX.onclick = () => { modal.remove(); resolve({ cancelled: true }); };
+
+        // ESC to close modal (local handler)
+        const escHandler = (e) => {
+            if (e.key === 'Escape') {
+                if (document.getElementById(modalId)) {
+                    modal.remove();
+                    document.removeEventListener('keydown', escHandler);
+                    resolve({ cancelled: true });
+                }
+            }
+        };
+        document.addEventListener('keydown', escHandler);
+
+        confirmBtn.onclick = () => {
+            const selectedType = Array.from(typeInputs).find(i => i.checked)?.value || 'full';
+            const ngayKy = modal.querySelector('#submit-ngay-ky').value || null;
+            const ngayKt = modal.querySelector('#submit-ngay-kt').value || null;
+            const materials = Array.from(modal.querySelectorAll('input[data-vt]')).map(inp => ({
+                ma_vt: inp.dataset.vt,
+                submitted: Number(inp.value) || 0
+            }));
+
+            modal.remove();
+            resolve({ cancelled: false, type: selectedType, ngay_ky: ngayKy, ngay_ket_thuc: ngayKt, materials });
+        };
+    });
 }
 
 // --- UI Generators & Event Binding ---

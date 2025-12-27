@@ -1,5 +1,6 @@
+
 import { GoogleGenAI } from "@google/genai";
-import { showToast, showLoading, sb, showView } from './app.js';
+import { showToast, showLoading, sb, showView, currentUser } from './app.js';
 import { openListingModal } from './listing-form.js';
 
 let chatSession = null;
@@ -8,27 +9,24 @@ let currentImageBlob = null;
 let globalApiKey = '';
 
 // --- QUẢN LÝ API KEY ---
-const DEFAULT_API_KEY = 'AIzaSyDMMoL4G5FDGPNUB2e84XNsNIQo68USVdQ'; // Key mặc định (fallback)
+const DEFAULT_API_KEY = 'AIzaSyDMMoL4G5FDGPNUB2e84XNsNIQo68USVdQ'; 
 
-// Fetches the global API key from Supabase
 async function fetchGlobalApiKey() {
     try {
         const { data, error } = await sb
             .from('app_config')
             .select('value')
             .eq('key', 'gemini_api_key')
-            .maybeSingle(); // Use maybeSingle to avoid error if row doesn't exist
+            .maybeSingle(); 
 
         if (!error && data && data.value) {
             globalApiKey = data.value;
-            console.log("Global API Key loaded.");
         }
     } catch (e) {
-        console.warn("Could not fetch global API key (table might not exist):", e);
+        console.warn("Could not fetch global API key:", e);
     }
 }
 
-// Saves the API Key to Supabase so everyone can use it
 async function saveGlobalApiKey(key) {
     try {
         const { error } = await sb
@@ -36,104 +34,146 @@ async function saveGlobalApiKey(key) {
             .upsert({ key: 'gemini_api_key', value: key });
 
         if (error) throw error;
-        
         globalApiKey = key;
         return true;
     } catch (e) {
         console.error("Error saving global API key:", e);
-        showToast("Lỗi lưu Key lên hệ thống (có thể do thiếu bảng app_config). Đã lưu cục bộ.", "info");
+        showToast("Lỗi lưu Key hệ thống. Đã lưu cục bộ.", "info");
         return false;
     }
 }
 
-// Helper lấy API Key ưu tiên: Global -> LocalStorage -> Default
 const getApiKey = () => {
-    // 1. Global Key from DB (Highest priority for shared use)
     if (globalApiKey && globalApiKey.trim().length > 10) return globalApiKey;
-
-    // 2. Local Storage (Fallback for individual overrides or offline dev)
     const storedKey = localStorage.getItem('user_gemini_api_key');
     if (storedKey && storedKey.trim().length > 10) return storedKey;
-
-    // 3. Default
     return DEFAULT_API_KEY;
 };
 
-// ... (Existing Tool Definitions) ...
+// --- HELPERS FOR SMART MAPPING ---
+
+// Generic function to find best match in DB column
+async function findBestMatchInDB(tableName, columnName, inputValue) {
+    if (!inputValue) return inputValue;
+    
+    // Fetch distinct values for this column
+    // Note: For large datasets, this should be optimized or cached/search via RPC
+    const { data } = await sb.from(tableName).select(columnName);
+    
+    if (!data || data.length === 0) return inputValue;
+
+    const lowerInput = inputValue.toLowerCase().trim()
+        .replace(/\./g, ' ')
+        .replace(/\s+/g, ' '); // Normalize spaces
+
+    const uniqueValues = [...new Set(data.map(item => item[columnName]).filter(v => v))];
+    
+    // 1. Exact contains match (priority)
+    const match = uniqueValues.find(val => {
+        const lowerVal = val.toLowerCase();
+        return lowerVal.includes(lowerInput) || lowerInput.includes(lowerVal);
+    });
+
+    return match || inputValue; // Return match or original if not found
+}
+
+async function validateProducts(materials) {
+    if (!materials || materials.length === 0) return { valid: true, items: [] };
+
+    const { data: products } = await sb.from('product').select('ma_vt');
+    const validCodes = new Set(products ? products.map(p => p.ma_vt.toLowerCase()) : []);
+    const productMap = new Map(products ? products.map(p => [p.ma_vt.toLowerCase(), p.ma_vt]) : []); 
+
+    const validItems = [];
+    const invalidCodes = [];
+
+    for (const mat of materials) {
+        const code = mat.ma_vt || mat.code; 
+        if (!code) continue;
+        
+        const lowerCode = code.trim().toLowerCase();
+        
+        if (validCodes.has(lowerCode)) {
+            validItems.push({
+                ma_vt: productMap.get(lowerCode), 
+                quota: mat.quota || 0,
+                sl_trung: mat.sl_trung || mat.won || 0
+            });
+        } else {
+            invalidCodes.push(code);
+        }
+    }
+
+    if (invalidCodes.length > 0) {
+        return { valid: false, invalidCodes: invalidCodes };
+    }
+
+    return { valid: true, items: validItems };
+}
+
+// --- TOOL DEFINITIONS ---
+
 const searchListingsTool = {
     name: 'search_listings',
-    description: 'Search for tender listings. Use this to find specific contracts by code, hospital, or status.',
+    description: 'Tìm kiếm hồ sơ thầu. Luôn trả về thông tin PSR.',
     parameters: {
         type: 'OBJECT',
         properties: {
-            keyword: { type: 'STRING', description: 'Search keyword (Hospital, Code, Province).' },
-            status: { type: 'STRING', description: 'Filter by status: "Win", "Fail", "Waiting".' },
-            year: { type: 'NUMBER', description: 'Filter by year.' },
-            limit: { type: 'NUMBER', description: 'Max results (default 20).' }
+            keyword: { type: 'STRING', description: 'Từ khóa tìm kiếm (Tên BV, Mã thầu, Tỉnh...)' },
+            status: { type: 'STRING', description: 'Lọc theo trạng thái: "Win", "Fail", "Waiting", "Listing".' },
+            from_date: { type: 'STRING', description: 'Ngày bắt đầu (YYYY-MM-DD).' },
+            to_date: { type: 'STRING', description: 'Ngày kết thúc (YYYY-MM-DD).' },
+            limit: { type: 'NUMBER', description: 'Số lượng kết quả tối đa (mặc định 15).' }
         }
-    }
-};
-
-const checkExpiringContractsTool = {
-    name: 'check_expiring_contracts',
-    description: 'Advanced check for contract expiration dates (ngay_ket_thuc) in "listing" table. Can check for "expired" (da het han), "expiring soon" (sap het han), or specific ranges like "next month" (thang sau), "next quarter".',
-    parameters: {
-        type: 'OBJECT',
-        properties: {
-            mode: { type: 'STRING', description: 'Mode: "expired" (already expired), "upcoming" (future expiration), "range" (specific date range).' },
-            days: { type: 'NUMBER', description: 'For "upcoming" mode: number of days from now (e.g. 30, 60).' },
-            start_date: { type: 'STRING', description: 'For "range" mode: Start date YYYY-MM-DD.' },
-            end_date: { type: 'STRING', description: 'For "range" mode: End date YYYY-MM-DD.' }
-        }
-    }
-};
-
-const searchProductHistoryTool = {
-    name: 'search_product_history',
-    description: 'Search for a specific Product (Mã VT). RETURNS EXACT STATS MATCHING "PRODUCT VIEW" (Quota, Waiting, Win, Fail) and full bidding history.',
-    parameters: {
-        type: 'OBJECT',
-        properties: {
-            product_code: { type: 'STRING', description: 'Product Code (e.g., "VT-003").' }
-        },
-        required: ['product_code']
     }
 };
 
 const getStatsTool = {
     name: 'get_general_stats',
-    description: 'Get SYSTEM-WIDE business statistics. Returns TWO types of Win Rates: 1. Contract Win Rate (based on listing count). 2. Revenue Win Rate (based on Total Won Value / Total Quota).',
-    parameters: { type: 'OBJECT', properties: {} } 
-};
-
-const analyzePsrPerformanceTool = {
-    name: 'analyze_psr_performance',
-    description: 'Analyze Sales Representative (PSR) performance. Calculates TWO metrics per PSR: 1. Contract Success (Won Contracts / Total Contracts). 2. Sales Success (Won Value / Total Quota).',
-    parameters: { type: 'OBJECT', properties: {} }
-};
-
-const getPsrProductsTool = {
-    name: 'get_psr_products',
-    description: 'Get detailed product performance for a specific PSR. Returns a list of products they bid on, including bid counts, win counts, and win rates (both by contract count and volume/quota). Use this to answer "What products does [PSR] sell?", "Which products did [PSR] bid on?", or "Win rate of [PSR] per product".',
-    parameters: { 
-        type: 'OBJECT', 
-        properties: {
-            psr_name: { type: 'STRING', description: 'Name of the PSR (e.g. "Le Van C")' }
-        },
-        required: ['psr_name']
-    }
-};
-
-const navigateTool = {
-    name: 'navigate_to',
-    description: 'Navigate to a specific screen.',
+    description: 'Tính toán thống kê tổng quát (Quota, Listing, Waiting, Win, Fail).',
     parameters: {
         type: 'OBJECT',
         properties: {
-            view_id: { 
-                type: 'STRING', 
-                description: 'View ID: "view-phat-trien", "view-ton-kho", "view-chi-tiet", "view-san-pham", "view-cai-dat".' 
-            }
+            from_date: { type: 'STRING', description: 'Ngày bắt đầu (YYYY-MM-DD).' },
+            to_date: { type: 'STRING', description: 'Ngày kết thúc (YYYY-MM-DD).' },
+            filter_psr: { type: 'STRING', description: 'Tên PSR.' }
+        }
+    }
+};
+
+const getListingItemsTool = {
+    name: 'get_listing_items',
+    description: 'Lấy chi tiết danh sách vật tư/sản phẩm bên trong một mã thầu cụ thể.',
+    parameters: {
+        type: 'OBJECT',
+        properties: {
+            ma_thau: { type: 'STRING', description: 'Mã hồ sơ thầu chính xác.' }
+        },
+        required: ['ma_thau']
+    }
+};
+
+const updateListingStatusTool = {
+    name: 'update_listing_status',
+    description: 'CẬP NHẬT trạng thái của hồ sơ thầu.',
+    parameters: {
+        type: 'OBJECT',
+        properties: {
+            ma_thau: { type: 'STRING', description: 'Mã hồ sơ thầu cần cập nhật.' },
+            new_status: { type: 'STRING', description: 'Trạng thái mới: "Win", "Fail", "Waiting", "Listing".' }
+        },
+        required: ['ma_thau', 'new_status']
+    }
+};
+
+const navigateSmartTool = {
+    name: 'navigate_smart',
+    description: 'Điều hướng đến các màn hình trong ứng dụng.',
+    parameters: {
+        type: 'OBJECT',
+        properties: {
+            view_id: { type: 'STRING', description: 'ID màn hình.' },
+            search_term: { type: 'STRING', description: 'Từ khóa tìm kiếm.' }
         },
         required: ['view_id']
     }
@@ -141,28 +181,25 @@ const navigateTool = {
 
 const openAddFormTool = {
     name: 'open_add_listing_form',
-    description: 'EXTRACT DATA FROM IMAGE AND OPEN FORM. Use this tool when the user uploads an image containing contract/listing data. You must extract fields like ma_thau, benh_vien, nam, tinh, etc. from the image text and pass them to this function.',
+    description: 'Mở form thêm mới hồ sơ thầu sau khi đã validate dữ liệu.',
     parameters: {
         type: 'OBJECT',
         properties: {
-            ma_thau: { type: 'STRING' },
             benh_vien: { type: 'STRING' },
-            nam: { type: 'NUMBER' },
             tinh: { type: 'STRING' },
-            khu_vuc: { type: 'STRING' },
-            loai: { type: 'STRING' },
             nha_phan_phoi: { type: 'STRING' },
-            ngay: { type: 'STRING' },
-            ngay_ky: { type: 'STRING' },
-            ngay_ket_thuc: { type: 'STRING' },
             nganh: { type: 'STRING' },
-            psr: { type: 'STRING' },
-            quan_ly: { type: 'STRING' },
-            details: { 
+            nam: { type: 'NUMBER' },
+            psr: { type: 'STRING', description: 'Tên nhân viên phụ trách (PSR).' },
+            materials: { 
                 type: 'ARRAY', 
+                description: 'Danh sách vật tư trích xuất (nếu có)',
                 items: {
                     type: 'OBJECT',
-                    properties: { ma_vt: { type: 'STRING' }, quota: { type: 'NUMBER' } }
+                    properties: {
+                        ma_vt: { type: 'STRING' },
+                        quota: { type: 'NUMBER' }
+                    }
                 }
             }
         }
@@ -170,11 +207,10 @@ const openAddFormTool = {
 };
 
 export async function initChatbot() {
-    // 1. Fetch Global Key first
     await fetchGlobalApiKey();
 
     const toggleBtn = document.getElementById('chatbot-toggle-btn');
-    const headerToggleBtn = document.getElementById('header-chatbot-btn'); // Mobile Header Button
+    const headerToggleBtn = document.getElementById('header-chatbot-btn');
     const closeBtn = document.getElementById('chatbot-close-btn');
     const minimizeBtn = document.getElementById('chatbot-minimize-btn');
     const chatWindow = document.getElementById('chatbot-window');
@@ -183,36 +219,39 @@ export async function initChatbot() {
     const fileInput = document.getElementById('chatbot-file-input');
     const removeImgBtn = document.getElementById('chatbot-remove-img');
 
+    // Add CSS for table scrolling within chatbot
+    const style = document.createElement('style');
+    style.textContent = `
+        #chatbot-messages table { display: block; overflow-x: auto; white-space: nowrap; max-width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 0.8rem; }
+        #chatbot-messages th, #chatbot-messages td { border: 1px solid #e5e7eb; padding: 6px 10px; }
+        #chatbot-messages th { background-color: #f3f4f6; font-weight: 600; text-align: left; }
+        .dark #chatbot-messages th { background-color: #374151; border-color: #4b5563; color: #e5e7eb; }
+        .dark #chatbot-messages td { border-color: #4b5563; color: #e5e7eb; }
+        #chatbot-messages::-webkit-scrollbar { width: 4px; }
+    `;
+    document.head.appendChild(style);
+
     if (!chatWindow) return;
 
-    // --- SETUP TƯƠNG TÁC GIAO DIỆN ---
-    
-    // Toggle Button Logic (FAB)
     if (toggleBtn) {
-        // Draggable Logic for FAB
         makeElementDraggable(toggleBtn, { isToggle: true, linkedEl: chatWindow });
         makeElementDraggable(chatWindow, { isWindow: true, linkedEl: toggleBtn });
     }
 
-    // Toggle Button Logic (Mobile Header)
     if (headerToggleBtn) {
         headerToggleBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             chatWindow.classList.toggle('hidden');
             if (!chatWindow.classList.contains('hidden')) {
-                alignChatWindowToButton(headerToggleBtn, chatWindow); // Re-use alignment logic (will trigger mobile bottom sheet mode)
+                alignChatWindowToButton(headerToggleBtn, chatWindow);
                 document.getElementById('chatbot-input').focus();
                 if (!chatSession) startNewSession();
             }
         });
     }
 
-    // Resize Logic
     initResizableTopLeft(chatWindow);
-
-    // Settings UI
     injectSettingsUI();
-    // ---------------------------------
 
     closeBtn.addEventListener('click', () => chatWindow.classList.add('hidden'));
     minimizeBtn.addEventListener('click', () => chatWindow.classList.add('hidden'));
@@ -250,7 +289,6 @@ export async function initChatbot() {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         const text = input.value.trim();
-        
         if (!text && !currentImageBlob) return;
 
         appendMessage(text, 'user', currentImageBlob);
@@ -272,122 +310,372 @@ export async function initChatbot() {
         this.style.height = (this.scrollHeight) + 'px';
     });
 
-    // Khởi tạo AI Client ban đầu
     try {
         const apiKey = getApiKey();
         aiClient = new GoogleGenAI({ apiKey: apiKey });
-    } catch(e) {
-        console.error("AI Init Failed", e);
-    }
+    } catch(e) { console.error("AI Init Failed", e); }
 
     renderSuggestions();
 }
 
-/**
- * Hàm thêm giao diện Cài đặt (Nút bánh răng + Modal)
- */
-function injectSettingsUI() {
-    const minimizeBtn = document.getElementById('chatbot-minimize-btn');
-    if (!minimizeBtn) return;
+async function startNewSession() {
+    try {
+        const currentKey = getApiKey();
+        const userName = currentUser ? currentUser.ho_ten : "Người dùng";
+        const userRole = currentUser ? currentUser.phan_quyen : "View";
+        const today = new Date();
+        const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        const dayName = ['Chủ Nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'][today.getDay()];
 
-    // A. Tạo nút Cài đặt (Icon bánh răng)
-    if (!document.getElementById('chatbot-settings-btn')) {
-        const settingsBtn = document.createElement('button');
-        settingsBtn.id = 'chatbot-settings-btn';
-        settingsBtn.className = "text-white hover:text-gray-200 transition-colors mr-2 opacity-80 hover:opacity-100";
-        settingsBtn.title = "Cài đặt API Key";
-        settingsBtn.innerHTML = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="3"></circle>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-            </svg>
+        const systemPrompt = `
+            Bạn là trợ lý ảo CRM Quản lý Thầu (WH-B4).
+            
+            **Thông tin ngữ cảnh:**
+            - Người dùng: ${userName} (${userRole}).
+            - **Hôm nay là:** ${dayName}, ${dateStr}. 
+            
+            **Quy tắc:**
+            1. Tìm kiếm: Luôn hiện cột PSR.
+            2. Thống kê: Tuân thủ logic Quota = Tổng Quota, Win/Fail/Waiting/Listing = Tổng SL Trúng theo trạng thái.
+            3. **Tạo mới (QUAN TRỌNG):** 
+               - Khi người dùng muốn tạo hồ sơ, hãy dùng 'open_add_listing_form'.
+               - Trích xuất tối đa thông tin từ yêu cầu (Bệnh viện, Tỉnh, NPP, Ngành...).
+               - **KHÔNG cần hỏi lại PSR nếu chưa có.** Hệ thống sẽ tự động điền tên người dùng hiện tại.
+
+            **Nhiệm vụ:**
+            - Trả lời ngắn gọn, tạo bảng Markdown khi liệt kê.
         `;
-        settingsBtn.onclick = openSettingsModal;
-        minimizeBtn.parentNode.insertBefore(settingsBtn, minimizeBtn);
-    }
 
-    // B. Tạo Modal nhập Key
-    if (!document.getElementById('chatbot-settings-modal')) {
-        const modal = document.createElement('div');
-        modal.id = 'chatbot-settings-modal';
-        modal.className = 'hidden absolute inset-0 bg-gray-900/90 flex flex-col items-center justify-center z-50 rounded-2xl p-4 backdrop-blur-sm';
-        modal.innerHTML = `
-            <div class="bg-white dark:bg-gray-800 p-5 rounded-xl w-full shadow-2xl border border-gray-200 dark:border-gray-700">
-                <h3 class="text-base font-bold mb-2 text-gray-800 dark:text-white flex items-center gap-2">
-                    🔑 Cài đặt API Key
-                </h3>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">
-                    Nhập key riêng của bạn để dùng. Nếu bạn là Admin, key này sẽ được lưu lên hệ thống cho mọi người dùng chung.
-                </p>
+        chatSession = aiClient.chats.create({
+            model: 'gemini-2.5-flash',
+            config: {
+                systemInstruction: systemPrompt,
+                tools: [
+                    { functionDeclarations: [
+                        searchListingsTool, 
+                        getListingItemsTool, 
+                        updateListingStatusTool,
+                        getStatsTool, 
+                        navigateSmartTool, 
+                        openAddFormTool 
+                    ]}
+                ]
+            }
+        });
+        console.log("Chat session initialized.");
+    } catch(e) {
+        console.error("Session Start Error", e);
+        appendMessage("Lỗi khởi tạo AI. Vui lòng kiểm tra API Key.", 'ai');
+    }
+}
+
+async function sendMessageToAI(text, imageFile) {
+    const loadingId = appendThinking();
+    
+    try {
+        if (!chatSession) await startNewSession();
+
+        let response;
+        if (imageFile) {
+            const base64Data = await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.readAsDataURL(imageFile);
+            });
+            const imagePart = { inlineData: { mimeType: imageFile.type, data: base64Data } };
+            const promptText = text || "Trích xuất thông tin từ ảnh này."; 
+            const parts = [{ text: promptText }, imagePart];
+            response = await chatSession.sendMessage({ message: parts });
+        } else {
+            response = await chatSession.sendMessage({ message: text });
+        }
+
+        const responseText = response.text || "";
+        const functionCalls = response.functionCalls;
+
+        if (functionCalls && functionCalls.length > 0) {
+            removeThinking(loadingId);
+            
+            for (const call of functionCalls) {
+                const fnName = call.name;
+                const args = call.args;
+                let result = { success: false, message: "Unknown error" };
                 
-                <div class="space-y-3">
-                    <input type="password" id="custom-api-key" 
-                        placeholder="dán key vào đây (AIza...)" 
-                        class="w-full text-sm border border-gray-300 dark:border-gray-600 p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9333ea] transition-all">
+                // --- 1. SEARCH LISTINGS ---
+                if (fnName === 'search_listings') {
+                    // Added psr to select
+                    let query = sb.from('listing')
+                        .select('ma_thau, benh_vien, tinh_trang, ngay, nha_phan_phoi, tinh, psr', { count: 'exact' })
+                        .order('ngay', { ascending: false })
+                        .limit(args.limit || 15); 
+
+                    if (args.status) query = query.ilike('tinh_trang', `%${args.status}%`);
+                    if (args.from_date) query = query.gte('ngay', args.from_date);
+                    if (args.to_date) query = query.lte('ngay', args.to_date);
                     
-                    <div class="flex justify-end gap-2 pt-2">
-                        <button id="cancel-settings" class="px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">Đóng</button>
-                        <button id="save-settings" class="px-4 py-2 text-xs font-medium bg-[#9333ea] text-white hover:bg-[#7e22ce] rounded-lg shadow-sm transition-colors">Lưu Key</button>
-                    </div>
-                </div>
-
-                <div class="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 text-center">
-                     <button id="remove-key" class="text-[11px] text-red-500 hover:text-red-600 hover:underline">Xóa Key & Dùng mặc định</button>
-                </div>
-            </div>
-        `;
-        document.getElementById('chatbot-window').appendChild(modal);
-
-        document.getElementById('cancel-settings').onclick = () => modal.classList.add('hidden');
-        
-        document.getElementById('save-settings').onclick = async () => {
-            const key = document.getElementById('custom-api-key').value.trim();
-            if (key) {
-                // 1. Save Local
-                localStorage.setItem('user_gemini_api_key', key);
+                    if (args.keyword) {
+                        const k = args.keyword;
+                        query = query.or(`ma_thau.ilike.%${k}%,benh_vien.ilike.%${k}%,nha_phan_phoi.ilike.%${k}%,tinh.ilike.%${k}%`);
+                    }
+                    
+                    const timeMsg = args.from_date ? ` từ ${args.from_date}` : '';
+                    appendMessage(`🔍 Đang tìm kiếm hồ sơ${timeMsg}...`, 'ai');
+                    const { data, count } = await query;
+                    
+                    if (data && data.length > 0) {
+                        result = { 
+                            count: count,
+                            data: data.map(i => ({
+                                ...i, 
+                                ngay: i.ngay ? i.ngay.split('-').reverse().join('/') : ''
+                            }))
+                        };
+                    } else {
+                        result = { message: "Không tìm thấy hồ sơ nào phù hợp." };
+                    }
+                } 
                 
-                // 2. Attempt Save Global (will persist if table exists)
-                await saveGlobalApiKey(key);
+                // --- 2. GET GENERAL STATS ---
+                else if (fnName === 'get_general_stats') {
+                    appendMessage(`📊 Đang tính toán số liệu thống kê...`, 'ai');
+                    
+                    let query = sb.from('detail').select('quota, sl_trung, tinh_trang, ngay, psr');
+                    
+                    if (args.from_date) query = query.gte('ngay', args.from_date);
+                    if (args.to_date) query = query.lte('ngay', args.to_date);
+                    if (args.filter_psr) query = query.ilike('psr', `%${args.filter_psr}%`);
 
-                // 3. Re-init Client
-                aiClient = new GoogleGenAI({ apiKey: key });
-                chatSession = null; 
-                showToast('✅ Đã lưu API Key!', 'success');
-                modal.classList.add('hidden');
-            } else {
-                showToast('Vui lòng nhập Key hợp lệ.', 'error');
-            }
-        };
+                    const { data, error } = await query;
 
-        document.getElementById('remove-key').onclick = () => {
-            if(confirm("Bạn có chắc muốn xóa Key?")) {
-                localStorage.removeItem('user_gemini_api_key');
-                // Note: We don't delete global key here to prevent accidental system breakage by non-admins if logic was different
-                // Reset to whatever global key exists or default
-                const newKey = globalApiKey || DEFAULT_API_KEY;
-                aiClient = new GoogleGenAI({ apiKey: newKey });
-                chatSession = null;
-                document.getElementById('custom-api-key').value = '';
-                showToast('Đã khôi phục API Key mặc định/hệ thống.', 'info');
-                modal.classList.add('hidden');
+                    if (error || !data) {
+                        result = { error: "Lỗi lấy dữ liệu thống kê." };
+                    } else {
+                        let stats = {
+                            Total_Quota: 0,
+                            Total_Listing: 0, 
+                            Total_Waiting: 0, 
+                            Total_Win: 0,     
+                            Total_Fail: 0     
+                        };
+
+                        data.forEach(item => {
+                            const quota = Number(item.quota) || 0;
+                            const sl_trung = Number(item.sl_trung) || 0;
+                            const status = item.tinh_trang;
+
+                            stats.Total_Quota += quota;
+
+                            if (status === 'Listing') stats.Total_Listing += sl_trung;
+                            else if (status === 'Waiting') stats.Total_Waiting += sl_trung;
+                            else if (status === 'Win') stats.Total_Win += sl_trung;
+                            else if (status === 'Fail') stats.Total_Fail += sl_trung;
+                        });
+
+                        result = {
+                            period: args.from_date ? `${args.from_date} đến ${args.to_date}` : 'Toàn thời gian',
+                            stats: stats
+                        };
+                    }
+                }
+
+                // --- 3. GET LISTING ITEMS (Enhanced with Status Label Logic) ---
+                else if (fnName === 'get_listing_items') {
+                    appendMessage(`📦 Đang lấy chi tiết vật tư của thầu ${args.ma_thau}...`, 'ai');
+                    
+                    // First get parent status to determine label
+                    const { data: listingData } = await sb.from('listing').select('tinh_trang').eq('ma_thau', args.ma_thau).single();
+                    const parentStatus = listingData ? listingData.tinh_trang : 'Listing';
+                    
+                    const { data, error } = await sb.from('detail')
+                        .select('ma_vt, quota, sl_trung, tinh_trang')
+                        .eq('ma_thau', args.ma_thau);
+                        
+                    if (error || !data || data.length === 0) {
+                        result = { message: "Không tìm thấy chi tiết." };
+                    } else {
+                        // Pass instruction to AI about header naming
+                        result = { 
+                            ma_thau: args.ma_thau, 
+                            listing_status: parentStatus,
+                            sl_header_label: `SL ${parentStatus}`, // Hint for AI
+                            items: data 
+                        };
+                    }
+                }
+
+                // --- 4. UPDATE STATUS ---
+                else if (fnName === 'update_listing_status') {
+                    if (currentUser.phan_quyen === 'View') {
+                        result = { error: "Bạn không có quyền cập nhật dữ liệu." };
+                    } else {
+                        appendMessage(`🔄 Đang cập nhật trạng thái ${args.ma_thau}...`, 'ai');
+                        if (window.updateListingStatus) {
+                             const { error } = await sb.from('listing').update({ tinh_trang: args.new_status }).eq('ma_thau', args.ma_thau);
+                             if(!error) await sb.from('detail').update({ tinh_trang: args.new_status }).eq('ma_thau', args.ma_thau);
+                             
+                             if (error) result = { error: error.message };
+                             else {
+                                 result = { success: true };
+                                 if(window.fetchListings) window.fetchListings(true);
+                             }
+                        } else {
+                             const { error } = await sb.from('listing').update({ tinh_trang: args.new_status }).eq('ma_thau', args.ma_thau);
+                             result = error ? { error: error.message } : { success: true };
+                        }
+                    }
+                }
+
+                // --- 5. NAVIGATE ---
+                else if (fnName === 'navigate_smart') {
+                    appendMessage(`🚀 Đang chuyển đến ${args.view_id}...`, 'ai');
+                    await showView(args.view_id);
+                    if (args.search_term) {
+                        setTimeout(() => {
+                            let searchInputId = '';
+                            if (args.view_id === 'view-ton-kho') searchInputId = 'listing-search';
+                            else if (args.view_id === 'view-chi-tiet') searchInputId = 'detail-search';
+                            else if (args.view_id === 'view-san-pham') searchInputId = 'product-search';
+                            
+                            if (searchInputId) {
+                                const inputEl = document.getElementById(searchInputId);
+                                if (inputEl) {
+                                    inputEl.value = args.search_term;
+                                    inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+                                }
+                            }
+                        }, 500);
+                    }
+                    result = { success: true };
+                }
+
+                // --- 6. OPEN ADD FORM (Enhanced Validation, Normalization & PSR Auto-fill) ---
+                else if (fnName === 'open_add_listing_form') {
+                    appendMessage(`🔍 Đang kiểm tra và chuẩn hóa dữ liệu...`, 'ai');
+                    
+                    // 1. Validate Product Codes
+                    const materialValidation = await validateProducts(args.materials);
+                    if (!materialValidation.valid) {
+                        result = { 
+                            status: "error",
+                            message: `Không thể tạo. Mã vật tư sau không hợp lệ (không tồn tại trong hệ thống): ${materialValidation.invalidCodes.join(', ')}` 
+                        };
+                    } else {
+                        // 2. Smart Normalization for ALL fields against DB
+                        // Run in parallel for speed
+                        const [normBenhVien, normTinh, normNPP, normNganh] = await Promise.all([
+                            findBestMatchInDB('listing', 'benh_vien', args.benh_vien),
+                            findBestMatchInDB('tinh_thanh', 'tinh', args.tinh),
+                            findBestMatchInDB('listing', 'nha_phan_phoi', args.nha_phan_phoi),
+                            findBestMatchInDB('listing', 'nganh', args.nganh)
+                        ]);
+
+                        // 3. Auto-fill PSR from Current User if not provided
+                        const finalPsr = args.psr || (currentUser ? currentUser.ho_ten : '');
+
+                        // 4. Prepare clean data
+                        const cleanData = {
+                            ...args,
+                            benh_vien: normBenhVien,
+                            tinh: normTinh,
+                            nha_phan_phoi: normNPP,
+                            nganh: normNganh,
+                            psr: finalPsr,
+                            details: materialValidation.items 
+                        };
+
+                        appendMessage(`📝 Đang mở form thêm mới...`, 'ai');
+                        await showView('view-ton-kho');
+                        
+                        setTimeout(() => {
+                            if (window.openListingModal) {
+                                window.openListingModal(cleanData, false, true); // item, readOnly, isPreFill
+                            }
+                        }, 500);
+                        
+                        result = { success: true, normalized_data: cleanData };
+                    }
+                }
+
+                // Send tool response back to AI
+                const toolResponse = await chatSession.sendMessage({
+                    message: [{
+                        functionResponse: {
+                            name: fnName,
+                            response: { result: result }
+                        }
+                    }]
+                });
+                
+                const finalResponseText = toolResponse.text;
+                appendMessage(finalResponseText, 'ai');
+                return; 
             }
-        };
+        }
+
+        removeThinking(loadingId);
+        if (responseText) appendMessage(responseText, 'ai');
+
+    } catch (error) {
+        console.error("AI Error", error);
+        removeThinking(loadingId);
+        appendMessage("Xin lỗi, tôi gặp sự cố kết nối: " + error.message, 'ai');
     }
 }
 
-function openSettingsModal() {
-    const modal = document.getElementById('chatbot-settings-modal');
-    const input = document.getElementById('custom-api-key');
-    if (modal && input) {
-        // Show current effective key (prioritize global if loaded)
-        input.value = getApiKey() === DEFAULT_API_KEY ? '' : getApiKey();
-        modal.classList.remove('hidden');
+// ... (Rest of UI functions) ...
+
+function appendMessage(text, sender, imageFile = null) {
+    const messagesContainer = document.getElementById('chatbot-messages');
+    const div = document.createElement('div');
+    div.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`;
+    
+    let contentHtml = '';
+    if (imageFile) {
+        const url = URL.createObjectURL(imageFile);
+        contentHtml += `<img src="${url}" class="max-w-[200px] rounded-lg mb-2 border border-gray-200 dark:border-gray-600 block">`;
     }
+    
+    const formattedText = (sender === 'ai' && typeof marked !== 'undefined') ? marked.parse(text) : text;
+
+    const bubbleClass = sender === 'user' 
+        ? 'bg-[#2563eb] text-white p-3 rounded-2xl rounded-tr-none shadow-md max-w-[85%] text-sm' 
+        : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 p-3 rounded-2xl rounded-tl-none shadow-sm border border-gray-100 dark:border-gray-600 max-w-[95%] prose dark:prose-invert text-sm leading-relaxed overflow-hidden';
+
+    // Add overflow wrapper for tables within the bubble
+    div.innerHTML = `
+        <div class="${bubbleClass}">
+            ${contentHtml}
+            <div class="overflow-x-auto w-full max-w-full">${formattedText}</div>
+        </div>
+    `;
+    messagesContainer.appendChild(div);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }
 
-// ... (Other UI Functions: initResizableTopLeft, makeElementDraggable, alignChatWindowToButton, handleImageSelect, renderSuggestions, etc.) ...
+function appendThinking() {
+    const messagesContainer = document.getElementById('chatbot-messages');
+    const id = 'thinking-' + Date.now();
+    const div = document.createElement('div');
+    div.id = id;
+    div.className = 'flex justify-start animate-fade-in-up';
+    div.innerHTML = `
+        <div class="bg-white dark:bg-gray-700 p-3 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2 border border-gray-100 dark:border-gray-600">
+            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
+            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+        </div>
+    `;
+    messagesContainer.appendChild(div);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    return id;
+}
 
-function initResizableTopLeft(el) {
+function removeThinking(id) {
+    const el = document.getElementById(id);
+    if (el) el.remove();
+}
+
+function initResizableTopLeft(el) { /* Code giữ nguyên */ 
     const handle = document.createElement('div');
     handle.className = 'absolute cursor-nwse-resize z-[100] flex items-center justify-center bg-transparent';
     handle.style.width = '24px';
@@ -462,7 +750,7 @@ function initResizableTopLeft(el) {
     handle.addEventListener('touchstart', onMouseDown);
 }
 
-function makeElementDraggable(el, options = {}) {
+function makeElementDraggable(el, options = {}) { /* Code giữ nguyên */ 
     let isDragging = false;
     let hasMoved = false;
     let startX, startY, initialLeft, initialTop;
@@ -583,10 +871,8 @@ function makeElementDraggable(el, options = {}) {
     el.addEventListener('touchstart', onMouseDown, { passive: false });
 }
 
-function alignChatWindowToButton(btn, win) {
+function alignChatWindowToButton(btn, win) { /* Code giữ nguyên */
     const winW = window.innerWidth;
-    
-    // MOBILE: Bottom Sheet Mode
     if (winW < 768) {
         win.style.position = 'fixed';
         win.style.top = 'auto'; 
@@ -602,8 +888,6 @@ function alignChatWindowToButton(btn, win) {
         win.style.zIndex = '10000';
         return;
     }
-
-    // DESKTOP
     const btnRect = btn.getBoundingClientRect();
     const winRect = win.getBoundingClientRect();
     let newTop = btnRect.top - winRect.height - 10;
@@ -620,7 +904,7 @@ function alignChatWindowToButton(btn, win) {
     win.style.borderRadius = ''; 
 }
 
-function handleImageSelect(file) {
+function handleImageSelect(file) { /* Code giữ nguyên */
     if (!file.type.startsWith('image/')) {
         showToast('Vui lòng chọn file ảnh.', 'error');
         return;
@@ -635,12 +919,12 @@ function handleImageSelect(file) {
     reader.readAsDataURL(file);
 }
 
-function renderSuggestions() {
+function renderSuggestions() { /* Code giữ nguyên */
     const suggestions = [
-        "Doanh số toàn bộ phận",
-        "Hiệu suất của các PSR",
-        "Hồ sơ nào sắp hết hạn?",
-        "Các sản phẩm nào dự thầu cao tỉ lệ thắng bao nhiêu?"
+        "Doanh số tuần này",
+        "Hợp đồng nào sắp hết hạn?",
+        "Thống kê tổng quát hôm nay",
+        "Chi tiết thầu của BV Bạch Mai"
     ];
     const container = document.getElementById('chatbot-suggestions');
     if(container) {
@@ -652,429 +936,74 @@ function renderSuggestions() {
     }
 }
 
-async function startNewSession() {
-    try {
-        const currentKey = getApiKey();
-        
-        chatSession = aiClient.chats.create({
-            model: 'gemini-2.5-flash',
-            config: {
-                systemInstruction: `
-                    You are "WH-B4 Assistant", an expert CRM Data Analyst.
-                    
-                    **KEY PRINCIPLE: DISTINGUISH METRICS**
-                    - **Listing Win Rate (Tỉ lệ thắng thầu)**: Based on COUNT of contracts (Hồ sơ) in 'listing' table. (Win Count / Total Listings).
-                    - **Product/Value Win Rate (Tỉ lệ thắng sản phẩm/Doanh số)**: Based on VOLUME in 'detail' table. (Total Won Value / Total Quota).
-                    - ALWAYS distinguish these two when answering performance questions.
-                    
-                    **IMAGE INPUT HANDLING:** - If the user uploads an image (e.g., photo of a document, spreadsheet row, or form), ANALYZE it immediately.
-                    - If the image contains tender/contract data (Hospital Name, Code, Year, Province, etc.), **EXTRACT** the data and **IMMEDIATELY CALL** the \`open_add_listing_form\` tool with the extracted data to pre-fill the form.
-                    - Do not just describe the image. ACT on it.
+// ... (Settings UI code - same as original) ...
+function injectSettingsUI() {
+    const minimizeBtn = document.getElementById('chatbot-minimize-btn');
+    if (!minimizeBtn) return;
 
-                    **Tools:**
-                    1. \`check_expiring_contracts\`: Finds listings expiring.
-                    2. \`search_product_history\`: For Product stats.
-                    3. \`get_psr_products\`: **CRITICAL**: Use this when asked about **which products a PSR sells** or **their win rates per product**. It returns detailed bid/win counts.
-                    4. \`analyze_psr_performance\`: For Overall PSR Stats ranking.
-                    5. \`get_general_stats\`: For Company Stats.
-                    6. \`search_listings\`: For searching contracts.
-                    7. \`open_add_listing_form\`: Use this to OPEN the form and PRE-FILL it with data extracted from an image or text.
-                    
-                    **Response Style:**
-                    - Vietnamese language.
-                    - Concise, data-driven.
-                    - Use Markdown tables.
-                `,
-                tools: [
-                    { functionDeclarations: [searchListingsTool, checkExpiringContractsTool, searchProductHistoryTool, getStatsTool, analyzePsrPerformanceTool, getPsrProductsTool, navigateTool, openAddFormTool] }
-                ]
+    if (!document.getElementById('chatbot-settings-btn')) {
+        const settingsBtn = document.createElement('button');
+        settingsBtn.id = 'chatbot-settings-btn';
+        settingsBtn.className = "text-white hover:text-gray-200 transition-colors mr-2 opacity-80 hover:opacity-100";
+        settingsBtn.title = "Cài đặt API Key";
+        settingsBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>`;
+        settingsBtn.onclick = openSettingsModal;
+        minimizeBtn.parentNode.insertBefore(settingsBtn, minimizeBtn);
+    }
+
+    if (!document.getElementById('chatbot-settings-modal')) {
+        const modal = document.createElement('div');
+        modal.id = 'chatbot-settings-modal';
+        modal.className = 'hidden absolute inset-0 bg-gray-900/90 flex flex-col items-center justify-center z-50 rounded-2xl p-4 backdrop-blur-sm';
+        modal.innerHTML = `
+            <div class="bg-white dark:bg-gray-800 p-5 rounded-xl w-full shadow-2xl border border-gray-200 dark:border-gray-700">
+                <h3 class="text-base font-bold mb-2 text-gray-800 dark:text-white flex items-center gap-2">🔑 Cài đặt API Key</h3>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mb-4">Nhập key riêng để dùng. Admin có thể lưu key cho hệ thống.</p>
+                <div class="space-y-3">
+                    <input type="password" id="custom-api-key" placeholder="dán key vào đây (AIza...)" class="w-full text-sm border border-gray-300 dark:border-gray-600 p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#9333ea] transition-all">
+                    <div class="flex justify-end gap-2 pt-2">
+                        <button id="cancel-settings" class="px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">Đóng</button>
+                        <button id="save-settings" class="px-4 py-2 text-xs font-medium bg-[#9333ea] text-white hover:bg-[#7e22ce] rounded-lg shadow-sm transition-colors">Lưu Key</button>
+                    </div>
+                </div>
+                <div class="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700 text-center">
+                     <button id="remove-key" class="text-[11px] text-red-500 hover:text-red-600 hover:underline">Xóa Key & Dùng mặc định</button>
+                </div>
+            </div>
+        `;
+        document.getElementById('chatbot-window').appendChild(modal);
+
+        document.getElementById('cancel-settings').onclick = () => modal.classList.add('hidden');
+        document.getElementById('save-settings').onclick = async () => {
+            const key = document.getElementById('custom-api-key').value.trim();
+            if (key) {
+                localStorage.setItem('user_gemini_api_key', key);
+                if (currentUser && currentUser.phan_quyen === 'Admin') await saveGlobalApiKey(key);
+                aiClient = new GoogleGenAI({ apiKey: key });
+                chatSession = null; 
+                showToast('✅ Đã lưu API Key!', 'success');
+                modal.classList.add('hidden');
+            } else { showToast('Vui lòng nhập Key hợp lệ.', 'error'); }
+        };
+        document.getElementById('remove-key').onclick = () => {
+            if(confirm("Xóa Key?")) {
+                localStorage.removeItem('user_gemini_api_key');
+                const newKey = globalApiKey || DEFAULT_API_KEY;
+                aiClient = new GoogleGenAI({ apiKey: newKey });
+                chatSession = null;
+                document.getElementById('custom-api-key').value = '';
+                showToast('Đã khôi phục API Key mặc định.', 'info');
+                modal.classList.add('hidden');
             }
-        });
-        console.log("Chat session initialized. Using Key:", currentKey.substring(0, 5) + "...");
-    } catch(e) {
-        console.error("Session Start Error", e);
-        appendMessage("Lỗi khởi tạo AI. Vui lòng kiểm tra API Key.", 'ai');
+        };
     }
 }
 
-async function sendMessageToAI(text, imageFile) {
-    const loadingId = appendThinking();
-    
-    try {
-        if (!chatSession) await startNewSession();
-
-        let response;
-        
-        if (imageFile) {
-            const base64Data = await new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onloadend = () => resolve(reader.result.split(',')[1]);
-                reader.readAsDataURL(imageFile);
-            });
-
-            const imagePart = { inlineData: { mimeType: imageFile.type, data: base64Data } };
-            // Gợi ý mạnh mẽ cho AI biết phải làm gì với ảnh
-            const promptText = text || "Hãy trích xuất thông tin từ ảnh này và điền vào form tạo hồ sơ mới."; 
-            const parts = [{ text: promptText }, imagePart];
-            response = await chatSession.sendMessage({ message: parts });
-        } else {
-            response = await chatSession.sendMessage({ message: text });
-        }
-
-        const responseText = response.text || "";
-        const functionCalls = response.functionCalls;
-
-        if (functionCalls && functionCalls.length > 0) {
-            removeThinking(loadingId);
-            
-            for (const call of functionCalls) {
-                const fnName = call.name;
-                const args = call.args;
-                let result = { error: "Unknown function" };
-                
-                if (fnName === 'search_listings') {
-                    let query = sb.from('listing')
-                        .select('ma_thau, benh_vien, tinh_trang, ngay, nha_phan_phoi, tinh', { count: 'exact' })
-                        .order('ngay', { ascending: false })
-                        .limit(args.limit || 20); 
-
-                    if (args.status) query = query.ilike('tinh_trang', `%${args.status}%`);
-                    if (args.year) query = query.eq('nam', args.year);
-                    if (args.keyword) {
-                        const k = args.keyword;
-                        query = query.or(`ma_thau.ilike.%${k}%,benh_vien.ilike.%${k}%,nha_phan_phoi.ilike.%${k}%,tinh.ilike.%${k}%`);
-                    }
-                    
-                    appendMessage(`🔍 Đang tìm thầu...`, 'ai');
-                    const { data, count } = await query;
-                    
-                    if (data && data.length > 0) {
-                        result = { 
-                            total_found: count,
-                            showing: data.length,
-                            message: `Tìm thấy tổng cộng ${count} kết quả. Dưới đây là ${data.length} hồ sơ mới nhất.`,
-                            listings: data 
-                        };
-                    } else {
-                        result = { message: "Không tìm thấy hồ sơ." };
-                    }
-                } 
-                else if (fnName === 'check_expiring_contracts') {
-                    const mode = args.mode || 'upcoming';
-                    const days = args.days || 30;
-                    const todayStr = new Date().toISOString().split('T')[0];
-                    let query = sb.from('listing').select('ma_thau, benh_vien, ngay_ket_thuc, tinh_trang, psr').order('ngay_ket_thuc', { ascending: true }).limit(20);
-                    let msg = "";
-
-                    if (mode === 'expired') {
-                        msg = `Kiểm tra các hồ sơ ĐÃ hết hạn (trước ${todayStr})...`;
-                        query = query.lt('ngay_ket_thuc', todayStr);
-                    } else if (mode === 'range') {
-                        const start = args.start_date || todayStr;
-                        const end = args.end_date || todayStr;
-                        msg = `Kiểm tra hồ sơ hết hạn từ ${start} đến ${end}...`;
-                        query = query.gte('ngay_ket_thuc', start).lte('ngay_ket_thuc', end);
-                    } else {
-                        const future = new Date();
-                        future.setDate(future.getDate() + days);
-                        const futureStr = future.toISOString().split('T')[0];
-                        msg = `Kiểm tra hồ sơ sắp hết hạn từ ${todayStr} đến ${futureStr}...`;
-                        query = query.gte('ngay_ket_thuc', todayStr).lte('ngay_ket_thuc', futureStr);
-                    }
-
-                    appendMessage(`⏳ ${msg}`, 'ai');
-                    const { data, error } = await query;
-
-                    if (error) {
-                        result = { message: `Lỗi truy vấn: ${error.message}` };
-                    } else if (!data || data.length === 0) {
-                        result = { message: `Không tìm thấy hồ sơ nào trong khoảng thời gian này.` };
-                    } else {
-                        const formattedData = data.map(item => ({
-                            ...item,
-                            ngay_ket_thuc: item.ngay_ket_thuc ? item.ngay_ket_thuc.split('-').reverse().join('/') : 'N/A'
-                        }));
-                        result = { count: data.length, listings: formattedData };
-                    }
-                }
-                else if (fnName === 'search_product_history') {
-                    const pCode = args.product_code;
-                    appendMessage(`📦 Đang tham khảo dữ liệu tổng hợp cho "${pCode}"...`, 'ai');
-                    
-                    const { data: prodStats } = await sb
-                        .from('product_total')
-                        .select('ma_vt, ten_vt, waiting, win, fail')
-                        .ilike('ma_vt', `%${pCode}%`)
-                        .limit(1)
-                        .single();
-
-                    const { data: history } = await sb
-                        .from('detail')
-                        .select('ma_thau, benh_vien, tinh_trang, quota, sl_trung, ngay_ky')
-                        .ilike('ma_vt', `%${pCode}%`)
-                        .order('ngay_ky', { ascending: false, nullsFirst: false }); 
-                        
-                    if (history && history.length > 0) {
-                        let manWaiting = 0, manWin = 0, manFail = 0, manQuota = 0;
-                        history.forEach(h => {
-                            const q = h.quota || 0;
-                            const w = h.sl_trung || 0;
-                            manQuota += q;
-                            if (h.tinh_trang === 'Win') manWin += w; 
-                            else if (h.tinh_trang === 'Fail') manFail += q;
-                            else if (h.tinh_trang === 'Waiting') manWaiting += q;
-                        });
-
-                        const finalSummary = prodStats ? {
-                            source: "Product View (Official)",
-                            product: prodStats.ma_vt,
-                            name: prodStats.ten_vt,
-                            waiting_quota: prodStats.waiting?.toLocaleString('vi-VN'),
-                            win_revenue: prodStats.win?.toLocaleString('vi-VN'),
-                            fail_quota: prodStats.fail?.toLocaleString('vi-VN'),
-                            total_quota: (prodStats.waiting + prodStats.win + prodStats.fail)?.toLocaleString('vi-VN') 
-                        } : {
-                            source: "Calculated from Detail History",
-                            product: pCode,
-                            waiting_quota: manWaiting.toLocaleString('vi-VN'),
-                            win_revenue: manWin.toLocaleString('vi-VN'),
-                            fail_quota: manFail.toLocaleString('vi-VN'),
-                            total_quota: manQuota.toLocaleString('vi-VN')
-                        };
-
-                        result = { 
-                            summary: finalSummary,
-                            history_count: history.length,
-                            history_list: history.slice(0, 50) 
-                        };
-                    } else {
-                        result = { message: `Không tìm thấy lịch sử cho sản phẩm ${pCode}.` };
-                    }
-                }
-                else if (fnName === 'get_general_stats') {
-                    const { data: listingData } = await sb.from('listing').select('tinh_trang');
-                    const { data: details } = await sb.from('detail').select('quota, sl_trung, tinh_trang');
-
-                    let listingStats = { total: 0, win: 0 };
-                    if (listingData) {
-                        listingStats.total = listingData.length;
-                        listingStats.win = listingData.filter(i => i.tinh_trang === 'Win').length;
-                    }
-
-                    let valueStats = { quota: 0, waiting: 0, win_revenue: 0, fail: 0 };
-                    if (details) {
-                        details.forEach(d => {
-                            const q = d.quota || 0;
-                            const w = d.sl_trung || 0;
-                            valueStats.quota += q;
-                            if (d.tinh_trang === 'Waiting') valueStats.waiting += q;
-                            else if (d.tinh_trang === 'Win') valueStats.win_revenue += w;
-                            else if (d.tinh_trang === 'Fail') valueStats.fail += q;
-                        });
-                    }
-
-                    const contractWinRate = listingStats.total > 0 ? ((listingStats.win / listingStats.total) * 100).toFixed(1) + '%' : '0%';
-                    const valueWinRate = valueStats.quota > 0 ? ((valueStats.win_revenue / valueStats.quota) * 100).toFixed(1) + '%' : '0%';
-
-                    result = { 
-                        contract_stats: {
-                            total_contracts: listingStats.total,
-                            win_count: listingStats.win,
-                            contract_win_rate: contractWinRate,
-                            note: "Tỉ lệ thắng dựa trên số lượng hồ sơ thầu (Listing)"
-                        },
-                        value_stats: {
-                            total_quota: valueStats.quota.toLocaleString('vi-VN'),
-                            win_revenue: valueStats.win_revenue.toLocaleString('vi-VN'),
-                            revenue_win_rate: valueWinRate,
-                            note: "Tỉ lệ thắng dựa trên doanh số/giá trị (Product Volume)"
-                        },
-                        breakdown_value: {
-                            waiting: valueStats.waiting.toLocaleString('vi-VN'),
-                            fail: valueStats.fail.toLocaleString('vi-VN')
-                        }
-                    };
-                }
-                else if (fnName === 'analyze_psr_performance') {
-                    appendMessage(`📊 Đang tính toán hiệu suất PSR (Hồ sơ & Doanh số)...`, 'ai');
-                    const { data: details, error } = await sb.from('detail').select('psr, ma_thau, quota, sl_trung, tinh_trang');
-
-                    if (error || !details || details.length === 0) {
-                        result = { message: "Không tìm thấy dữ liệu chi tiết thầu." };
-                    } else {
-                        const stats = {};
-                        details.forEach(d => {
-                            const psrName = d.psr || "Chưa phân công";
-                            if (!stats[psrName]) stats[psrName] = { total_quota: 0, win_revenue: 0, contract_ids: new Set(), win_contract_ids: new Set() };
-                            const q = d.quota || 0;
-                            const w = d.sl_trung || 0;
-                            stats[psrName].total_quota += q;
-                            if (d.tinh_trang === 'Win') stats[psrName].win_revenue += w;
-                            stats[psrName].contract_ids.add(d.ma_thau);
-                            if (d.tinh_trang === 'Win') stats[psrName].win_contract_ids.add(d.ma_thau);
-                        });
-
-                        const report = Object.entries(stats).map(([psr, val]) => {
-                            const totalContracts = val.contract_ids.size;
-                            const winContracts = val.win_contract_ids.size;
-                            const contractRate = totalContracts > 0 ? ((winContracts / totalContracts) * 100).toFixed(1) + '%' : '0%';
-                            const valueRate = val.total_quota > 0 ? ((val.win_revenue / val.total_quota) * 100).toFixed(1) + '%' : '0%';
-                            return {
-                                psr: psr,
-                                contracts: { total: totalContracts, won: winContracts, win_rate: contractRate },
-                                value: { quota: val.total_quota.toLocaleString('vi-VN'), revenue: val.win_revenue.toLocaleString('vi-VN'), win_rate: valueRate }
-                            };
-                        }).sort((a, b) => parseFloat(b.value.revenue.replace(/\./g, '')) - parseFloat(a.value.revenue.replace(/\./g, '')));
-
-                        result = { note: "Báo cáo phân biệt rõ Tỉ lệ thắng theo Hồ sơ (Contracts) và Theo Doanh số (Value).", psr_ranking: report };
-                    }
-                }
-                else if (fnName === 'get_psr_products') {
-                    const psrName = args.psr_name;
-                    appendMessage(`🕵️‍♀️ Đang thống kê chi tiết sản phẩm của PSR "${psrName}"...`, 'ai');
-                    const { data: details, error } = await sb.from('detail').select('ma_vt, quota, sl_trung, tinh_trang').ilike('psr', `%${psrName}%`); 
-                    if (error || !details || details.length === 0) {
-                        result = { message: `Không tìm thấy dữ liệu thầu nào cho PSR "${psrName}".` };
-                    } else {
-                        const stats = {};
-                        details.forEach(d => {
-                            const prod = d.ma_vt || "Unknown";
-                            if (!stats[prod]) stats[prod] = { bids: 0, wins: 0, total_quota: 0, total_won: 0 };
-                            const q = d.quota || 0;
-                            const w = d.sl_trung || 0;
-                            stats[prod].bids++;
-                            stats[prod].total_quota += q;
-                            if (d.tinh_trang === 'Win') { stats[prod].wins++; stats[prod].total_won += w; }
-                        });
-
-                        const uniqueMaVts = Object.keys(stats);
-                        const { data: productInfos } = await sb.from('product').select('ma_vt, ten_vt').in('ma_vt', uniqueMaVts);
-                        const nameMap = {};
-                        if (productInfos) productInfos.forEach(p => nameMap[p.ma_vt] = p.ten_vt);
-
-                        const summaryList = uniqueMaVts.map(ma_vt => {
-                            const s = stats[ma_vt];
-                            const contractWinRate = s.bids > 0 ? ((s.wins / s.bids) * 100).toFixed(1) : '0';
-                            const volumeWinRate = s.total_quota > 0 ? ((s.total_won / s.total_quota) * 100).toFixed(1) : '0';
-                            return {
-                                ma_vt: ma_vt,
-                                ten_vt: nameMap[ma_vt] || "Chưa có tên",
-                                participation_count: s.bids,
-                                win_count: s.wins,
-                                total_quota: s.total_quota.toLocaleString('vi-VN'),
-                                total_won_value: s.total_won.toLocaleString('vi-VN'),
-                                contract_win_rate: `${contractWinRate}%`,
-                                volume_win_rate: `${volumeWinRate}%`
-                            };
-                        }).sort((a, b) => parseFloat(b.total_quota.replace(/\./g,'')) - parseFloat(a.total_quota.replace(/\./g,'')));
-
-                        result = { psr: psrName, total_products_managed: uniqueMaVts.length, product_performance: summaryList.slice(0, 30) };
-                    }
-                }
-                else if (fnName === 'navigate_to') {
-                    appendMessage(`🚀 Đang chuyển trang...`, 'ai');
-                    await showView(args.view_id);
-                    result = { success: true };
-                }
-                else if (fnName === 'open_add_listing_form') {
-                    appendMessage(`📝 Đang phân tích và chuẩn bị form...`, 'ai');
-                    const now = new Date();
-                    if (!args.ngay) args.ngay = now.toISOString().split('T')[0]; 
-                    if (!args.nam) args.nam = now.getFullYear();
-
-                    if (args.benh_vien) {
-                        try {
-                            const { data: history } = await sb.from('listing').select('benh_vien, tinh, khu_vuc, loai, nha_phan_phoi, quan_ly, psr').ilike('benh_vien', `%${args.benh_vien}%`).order('ngay', { ascending: false }).limit(1).maybeSingle();
-                            if (history) {
-                                if (history.benh_vien) args.benh_vien = history.benh_vien;
-                                if (!args.tinh) args.tinh = history.tinh;
-                                if (!args.khu_vuc) args.khu_vuc = history.khu_vuc;
-                                if (!args.loai) args.loai = history.loai;
-                                if (!args.nha_phan_phoi) args.nha_phan_phoi = history.nha_phan_phoi;
-                                if (!args.quan_ly) args.quan_ly = history.quan_ly;
-                                if (!args.psr) args.psr = history.psr;
-                                appendMessage(`💡 Đã tìm thấy thông tin lịch sử của ${args.benh_vien}. Tự động điền...`, 'ai');
-                            }
-                        } catch (err) { console.log("Auto-fill error", err); }
-                    }
-                    await showView('view-ton-kho');
-                    setTimeout(() => openListingModal(args, false, true), 500);
-                    result = { success: true, message: "Form opened with smart suggestions." };
-                }
-
-                const toolResponse = await chatSession.sendMessage({
-                    message: [{
-                        functionResponse: {
-                            name: fnName,
-                            response: { result: result }
-                        }
-                    }]
-                });
-                
-                const finalResponseText = toolResponse.text;
-                appendMessage(finalResponseText, 'ai');
-                return; 
-            }
-        }
-
-        removeThinking(loadingId);
-        if (responseText) appendMessage(responseText, 'ai');
-
-    } catch (error) {
-        console.error("AI Error", error);
-        removeThinking(loadingId);
-        appendMessage("Xin lỗi, tôi gặp sự cố: " + error.message, 'ai');
+function openSettingsModal() {
+    const modal = document.getElementById('chatbot-settings-modal');
+    const input = document.getElementById('custom-api-key');
+    if (modal && input) {
+        input.value = getApiKey() === DEFAULT_API_KEY ? '' : getApiKey();
+        modal.classList.remove('hidden');
     }
-}
-
-function appendMessage(text, sender, imageFile = null) {
-    const messagesContainer = document.getElementById('chatbot-messages');
-    const div = document.createElement('div');
-    div.className = `flex ${sender === 'user' ? 'justify-end' : 'justify-start'} animate-fade-in-up`;
-    
-    let contentHtml = '';
-    
-    if (imageFile) {
-        const url = URL.createObjectURL(imageFile);
-        contentHtml += `<img src="${url}" class="max-w-[200px] rounded-lg mb-2 border border-gray-200 dark:border-gray-600 block">`;
-    }
-    
-    const formattedText = (sender === 'ai' && typeof marked !== 'undefined') ? marked.parse(text) : text;
-
-    const bubbleClass = sender === 'user' 
-        ? 'bg-[#2563eb] text-white p-3 rounded-2xl rounded-tr-none shadow-md max-w-[85%] text-sm' 
-        : 'bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 p-3 rounded-2xl rounded-tl-none shadow-sm border border-gray-100 dark:border-gray-600 max-w-[85%] prose dark:prose-invert text-sm leading-relaxed';
-
-    div.innerHTML = `
-        <div class="${bubbleClass}">
-            ${contentHtml}
-            <div>${formattedText}</div>
-        </div>
-    `;
-    
-    messagesContainer.appendChild(div);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-}
-
-function appendThinking() {
-    const messagesContainer = document.getElementById('chatbot-messages');
-    const id = 'thinking-' + Date.now();
-    const div = document.createElement('div');
-    div.id = id;
-    div.className = 'flex justify-start animate-fade-in-up';
-    div.innerHTML = `
-        <div class="bg-white dark:bg-gray-700 p-3 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-2 border border-gray-100 dark:border-gray-600">
-            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce"></div>
-            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-            <div class="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-        </div>
-    `;
-    messagesContainer.appendChild(div);
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    return id;
-}
-
-function removeThinking(id) {
-    const el = document.getElementById(id);
-    if (el) el.remove();
 }

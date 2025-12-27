@@ -20,6 +20,49 @@ let productDateFilter = {
     end: ''
 };
 
+// Helpers for local date formatting/parsing (YYYY-MM-DD)
+function formatLocalDate(dt) {
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+function parseYMD(ymd) {
+    if (!ymd) return null;
+    const parts = String(ymd).split('-').map(n => parseInt(n, 10));
+    if (parts.length !== 3) return null;
+    return new Date(parts[0], parts[1] - 1, parts[2]);
+}
+
+function getDateRangeByTypeProduct(type) {
+    const now = new Date();
+    let start, end;
+    if (type === 'today') {
+        start = formatLocalDate(now); end = formatLocalDate(now);
+    } else if (type === 'week') {
+        const day = now.getDay();
+        const diffToMonday = (day + 6) % 7;
+        const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - diffToMonday); startOfWeek.setHours(0,0,0,0);
+        const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6); endOfWeek.setHours(23,59,59,999);
+        start = formatLocalDate(startOfWeek); end = formatLocalDate(endOfWeek);
+    } else if (type === 'month') {
+        const s = new Date(now.getFullYear(), now.getMonth(), 1);
+        const e = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        start = formatLocalDate(s); end = formatLocalDate(e);
+    } else if (type === 'quarter') {
+        const quarter = Math.floor(now.getMonth() / 3);
+        const s = new Date(now.getFullYear(), quarter * 3, 1);
+        const e = new Date(now.getFullYear(), quarter * 3 + 3, 0);
+        start = formatLocalDate(s); end = formatLocalDate(e);
+    } else if (type === 'year') {
+        const s = new Date(now.getFullYear(), 0, 1);
+        const e = new Date(now.getFullYear(), 11, 31);
+        start = formatLocalDate(s); end = formatLocalDate(e);
+    }
+    return { start, end };
+}
+
 // User Preferences Key
 const getStorageKey = () => `crm_user_settings_${currentUser ? currentUser.gmail : 'guest'}_product_view_v4`;
 
@@ -460,14 +503,59 @@ function setupProductDateFilterListeners() {
 
     updateActiveButton('all');
 
+    // Helper to format local date YYYY-MM-DD
+    const formatLocal = (dt) => {
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, '0');
+        const d = String(dt.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    };
+
+    const getDateRangeByTypeLocal = (type) => {
+        const now = new Date();
+        let start, end;
+        if (type === 'today') {
+            start = formatLocal(now); end = formatLocal(now);
+        } else if (type === 'week') {
+            const day = now.getDay();
+            const diffToMonday = (day + 6) % 7;
+            const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - diffToMonday); startOfWeek.setHours(0,0,0,0);
+            const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6); endOfWeek.setHours(23,59,59,999);
+            start = formatLocal(startOfWeek); end = formatLocal(endOfWeek);
+        } else if (type === 'month') {
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            start = formatLocal(startOfMonth); end = formatLocal(endOfMonth);
+        } else if (type === 'quarter') {
+            const quarter = Math.floor(now.getMonth() / 3);
+            const startOfQuarter = new Date(now.getFullYear(), quarter * 3, 1);
+            const endOfQuarter = new Date(now.getFullYear(), quarter * 3 + 3, 0);
+            start = formatLocal(startOfQuarter); end = formatLocal(endOfQuarter);
+        } else if (type === 'year') {
+            const startOfYear = new Date(now.getFullYear(), 0, 1);
+            const endOfYear = new Date(now.getFullYear(), 11, 31);
+            start = formatLocal(startOfYear); end = formatLocal(endOfYear);
+        }
+        return { start, end };
+    };
+
     btns.forEach(btn => {
         btn.addEventListener('click', () => {
             const type = btn.dataset.type;
             productDateFilter.type = type;
-            productDateFilter.start = '';
-            productDateFilter.end = '';
-            startInput.value = '';
-            endInput.value = '';
+            // Populate custom inputs for non-'all' and non-'custom'
+            if (type && type !== 'all' && type !== 'custom') {
+                const range = getDateRangeByTypeLocal(type);
+                productDateFilter.start = range.start || '';
+                productDateFilter.end = range.end || '';
+                if (startInput) startInput.value = range.start || '';
+                if (endInput) endInput.value = range.end || '';
+            } else {
+                productDateFilter.start = '';
+                productDateFilter.end = '';
+                if (startInput) startInput.value = '';
+                if (endInput) endInput.value = '';
+            }
             updateActiveButton(type);
             recalcProductData(); // Recalculate based on new filter
         });
@@ -492,40 +580,25 @@ function isDateInProductRange(dateString) {
     if (!dateString) return false;
     const d = new Date(dateString);
     d.setHours(0,0,0,0);
-    const now = new Date();
-    now.setHours(0,0,0,0);
-
     const { type, start, end } = productDateFilter;
 
     if (type === 'all') return true;
-    
+
     if (type === 'custom' && start && end) {
-        const s = new Date(start); s.setHours(0,0,0,0);
-        const e = new Date(end); e.setHours(0,0,0,0);
-        return d >= s && d <= e;
+        const s = parseYMD(start); if (s) s.setHours(0,0,0,0);
+        const e = parseYMD(end); if (e) e.setHours(23,59,59,999);
+        if (s && e) return d >= s && d <= e;
+        return false;
     }
 
-    if (type === 'today') return d.getTime() === now.getTime();
-    
-    if (type === 'week') {
-        const day = now.getDay() || 7; 
-        const startOfWeek = new Date(now);
-        if (day !== 1) startOfWeek.setHours(-24 * (day - 1)); 
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6);
-        return d >= startOfWeek && d <= endOfWeek;
+    if (type && type !== 'custom' && type !== 'all') {
+        const range = getDateRangeByTypeProduct(type);
+        if (range && range.start && range.end) {
+            const s = parseYMD(range.start); if (s) s.setHours(0,0,0,0);
+            const e = parseYMD(range.end); if (e) e.setHours(23,59,59,999);
+            if (s && e) return d >= s && d <= e;
+        }
     }
-
-    if (type === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    
-    if (type === 'quarter') {
-        const qNow = Math.floor(now.getMonth() / 3);
-        const qDate = Math.floor(d.getMonth() / 3);
-        return qNow === qDate && d.getFullYear() === now.getFullYear();
-    }
-
-    if (type === 'year') return d.getFullYear() === now.getFullYear();
-
     return true;
 }
 

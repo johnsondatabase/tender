@@ -97,7 +97,7 @@ export async function onShowDashboardView() {
         <div class="flex flex-col h-full bg-gray-50 dark:bg-gray-900 overflow-y-auto custom-scrollbar relative">
             
             <!-- GLOBAL DATE FILTER BAR -->
-            <div class="sticky top-0 z-40 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm px-2 pt-2 md:px-6 md:pt-6 pb-2 transition-all shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
+            <div class="sticky top-0 z-40 bg-gray-50/95 dark:bg-gray-900/95 backdrop-blur-sm px-2 pt-0 md:px-6 md:pt-0 pb-2 transition-all shadow-[0_1px_3px_rgba(0,0,0,0.05)]">
                 <div class="bg-white dark:bg-gray-800 p-2 md:p-3 rounded-xl shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col md:flex-row items-center gap-2 md:gap-3 justify-between">
                     
                     <!-- Row 1: Period Buttons -->
@@ -441,15 +441,33 @@ function setupDashboardDateFilterListeners() {
 
     // Default to Year
     updateActiveButton('year');
+    // Populate start/end inputs for default (year)
+    const defaultRange = getDateRangeByType('year');
+    if (defaultRange && startInput && endInput) {
+        startInput.value = defaultRange.start || '';
+        endInput.value = defaultRange.end || '';
+        dashboardDateFilter.start = defaultRange.start || '';
+        dashboardDateFilter.end = defaultRange.end || '';
+    }
 
     btns.forEach(btn => {
         btn.addEventListener('click', () => {
             const type = btn.dataset.type;
             dashboardDateFilter.type = type;
-            dashboardDateFilter.start = '';
-            dashboardDateFilter.end = '';
-            startInput.value = '';
-            endInput.value = '';
+            // For non-'all' and non-'custom' types populate the custom inputs so user can verify dates
+            if (type && type !== 'all' && type !== 'custom') {
+                const range = getDateRangeByType(type);
+                dashboardDateFilter.start = range.start || '';
+                dashboardDateFilter.end = range.end || '';
+                if (startInput) startInput.value = range.start || '';
+                if (endInput) endInput.value = range.end || '';
+            } else {
+                // 'all' => clear custom inputs; 'custom' will be set via Apply button
+                dashboardDateFilter.start = '';
+                dashboardDateFilter.end = '';
+                if (startInput) startInput.value = '';
+                if (endInput) endInput.value = '';
+            }
             updateActiveButton(type);
             applyDashboardDateFilter();
         });
@@ -471,17 +489,18 @@ function setupDashboardDateFilterListeners() {
 }
 
 function applyDashboardDateFilter() {
-    // 1. Filter Raw Listings based on Date
-    const filteredListings = rawListings.filter(l => isDateInDashboardRange(l.ngay));
-    
-    // 2. Filter Raw Details (Must match filtered listings OR have matching date if present)
-    const validMaThaus = new Set(filteredListings.map(l => l.ma_thau));
-    const filteredDetails = rawDetails.filter(d => validMaThaus.has(d.ma_thau));
+    // Filter details by the dashboard date range using the detail's `ngay` column.
+    // This ensures Dashboard KPIs (Quota / Win) match the Detail view which is affected by the Date column.
+    const filteredDetails = rawDetails.filter(d => isDateInDashboardRange(d.ngay));
 
-    // 3. Recalculate
+    // Derive the set of related listings from filtered details (by ma_thau)
+    const validMaThaus = new Set(filteredDetails.map(d => d.ma_thau));
+    const filteredListings = rawListings.filter(l => validMaThaus.has(l.ma_thau));
+
+    // Recalculate using filtered listings and filtered details
     calculateGlobalStats(filteredListings, filteredDetails);
-    
-    // 4. Update PSR Section (pass filtered details)
+
+    // Update PSR Section (pass filtered details)
     refreshPsrSection(filteredDetails);
 }
 
@@ -496,34 +515,84 @@ function isDateInDashboardRange(dateString) {
 
     if (type === 'all') return true;
     
+    // Helper to parse YYYY-MM-DD into local Date at midnight
+    const parseYMD = (ymd) => {
+        if (!ymd) return null;
+        const parts = String(ymd).split('-').map(n => parseInt(n, 10));
+        if (parts.length !== 3) return null;
+        return new Date(parts[0], parts[1] - 1, parts[2]);
+    };
+
     if (type === 'custom' && start && end) {
-        const s = new Date(start); s.setHours(0,0,0,0);
-        const e = new Date(end); e.setHours(0,0,0,0);
-        return d >= s && d <= e;
+        const s = parseYMD(start); if (s) s.setHours(0,0,0,0);
+        const e = parseYMD(end); if (e) e.setHours(23,59,59,999);
+        if (s && e) return d >= s && d <= e;
+        return false;
     }
 
     if (type === 'today') return d.getTime() === now.getTime();
-    
-    if (type === 'week') {
-        const day = now.getDay() || 7; 
-        const startOfWeek = new Date(now);
-        if (day !== 1) startOfWeek.setHours(-24 * (day - 1)); 
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6);
-        return d >= startOfWeek && d <= endOfWeek;
-    }
 
-    if (type === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    
-    if (type === 'quarter') {
-        const qNow = Math.floor(now.getMonth() / 3);
-        const qDate = Math.floor(d.getMonth() / 3);
-        return qNow === qDate && d.getFullYear() === now.getFullYear();
+    // For structured period types, reuse getDateRangeByType to avoid mismatches
+    if (type && type !== 'custom' && type !== 'all') {
+        const range = getDateRangeByType(type);
+        if (range && range.start && range.end) {
+            const s = parseYMD(range.start); if (s) s.setHours(0,0,0,0);
+            const e = parseYMD(range.end); if (e) e.setHours(23,59,59,999);
+            if (s && e) return d >= s && d <= e;
+        }
     }
-
-    if (type === 'year') return d.getFullYear() === now.getFullYear();
 
     return true;
+}
+
+// Helper to compute start/end ISO date strings for given period types (used to populate Custom inputs)
+function getDateRangeByType(type) {
+    const now = new Date();
+    // format local date YYYY-MM-DD without timezone conversion
+    const formatLocal = (dt) => {
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, '0');
+        const d = String(dt.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    };
+    let start, end;
+
+    if (type === 'today') {
+        start = formatLocal(now);
+        end = formatLocal(now);
+    } else if (type === 'week') {
+        // Week: Monday ... Sunday
+        // getDay(): 0 (Sun) .. 6 (Sat). Compute distance to Monday.
+        const day = now.getDay(); // 0..6
+        const diffToMonday = (day + 6) % 7; // 0 if Monday, 6 if Sunday
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - diffToMonday);
+        startOfWeek.setHours(0,0,0,0,0);
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6);
+        endOfWeek.setHours(23,59,59,999);
+        start = formatLocal(startOfWeek);
+        end = formatLocal(endOfWeek);
+    } else if (type === 'month') {
+        // Month: first day → last day of current month
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        start = formatLocal(startOfMonth);
+        end = formatLocal(endOfMonth);
+    } else if (type === 'quarter') {
+        // Quarter: calculate current quarter start and end
+        const quarter = Math.floor(now.getMonth() / 3);
+        const startOfQuarter = new Date(now.getFullYear(), quarter * 3, 1);
+        const endOfQuarter = new Date(now.getFullYear(), quarter * 3 + 3, 0);
+        start = formatLocal(startOfQuarter);
+        end = formatLocal(endOfQuarter);
+    } else if (type === 'year') {
+        const startOfYear = new Date(now.getFullYear(), 0, 1);
+        const endOfYear = new Date(now.getFullYear(), 11, 31);
+        start = formatLocal(startOfYear);
+        end = formatLocal(endOfYear);
+    }
+    return { start, end };
 }
 
 // ... (setupContractMonitorListeners, setupHierarchyToggleListeners unchanged) ...
@@ -659,10 +728,13 @@ function calculateGlobalStats(listings, details) {
         }
     });
 
+    // Aggregate detail values but *map each detail to its parent listing's status*
+    // so Status Distribution always reflects the listing (parent) status.
     details.forEach(d => {
-        const status = ['Listing', 'Waiting', 'Win', 'Fail'].includes(d.tinh_trang) ? d.tinh_trang : 'Listing';
-        const val = (status === 'Win' ? (d.sl_trung || 0) : (d.quota || 0));
-        statusValues[status] += val;
+        const parent = listingMap[d.ma_thau];
+        const mappedStatus = parent ? (parent.tinh_trang || 'Listing') : (['Listing', 'Waiting', 'Win', 'Fail'].includes(d.tinh_trang) ? d.tinh_trang : 'Listing');
+        const val = (mappedStatus === 'Win' ? (d.sl_trung || 0) : (d.quota || 0));
+        statusValues[mappedStatus] = (statusValues[mappedStatus] || 0) + val;
     });
 
     const distChildLabel = document.getElementById('dist-child-label');
@@ -687,9 +759,18 @@ function calculateGlobalStats(listings, details) {
             }
         });
     } else {
+        // Calculate totals from filtered details, affected by time filter
         details.forEach(d => {
+            const listing = listingMap[d.ma_thau];
+            const status = listing ? listing.tinh_trang || 'Listing' : 'Listing';
+
+            // Sum all quotas from filtered details
             totalQuota += (d.quota || 0);
-            totalWin += (d.sl_trung || 0);
+
+            // Sum Won Qty only for Win status
+            if (status === 'Win') {
+                totalWin += (d.sl_trung || 0);
+            }
         });
     }
 
@@ -803,9 +884,128 @@ function renderGlobalCharts(data) {
             const val = values[i];
             const pct = total > 0 ? ((val / total) * 100).toFixed(1) + '%' : '0%';
             const color = bgColors[i];
-            return `<div class="flex items-center justify-between p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"><div class="flex items-center gap-2"><span class="w-3 h-3 rounded-full" style="background-color: ${color}"></span><div class="flex flex-col"><span class="text-xs font-bold text-gray-700 dark:text-gray-200">${label}</span><span class="text-[10px] text-gray-500 dark:text-gray-400">${val.toLocaleString('vi-VN')} (${pct})</span></div></div></div>`;
+            // compact legend item with data-index for interactivity
+            return `<div class="legend-item flex items-center justify-between p-1.5 rounded transition-colors" data-index="${i}" style="cursor:pointer;"><div class="flex items-center gap-2"><span class="legend-dot w-3 h-3 rounded-full" style="background-color: ${color}"></span><div class="flex flex-col leading-tight"><span class="legend-label text-xs font-bold text-gray-700 dark:text-gray-200">${label}</span><span class="legend-meta text-[10px] text-gray-500 dark:text-gray-400">${val.toLocaleString('vi-VN')} (${pct})</span></div></div></div>`;
         }).join('');
     }
+
+    // Small styling adjustments: reduce vertical spacing on mobile
+    try {
+        if (legendContainer) {
+            legendContainer.style.display = 'flex';
+            legendContainer.style.flexDirection = 'column';
+            legendContainer.style.gap = window.innerWidth < 768 ? '6px' : '8px';
+            legendContainer.querySelectorAll('.legend-item').forEach(it => {
+                it.style.padding = window.innerWidth < 768 ? '6px 4px' : '8px 10px';
+            });
+        }
+    } catch(e) {}
+
+    // Add interactivity: click legend to toggle slice (and strike-through label)
+    try {
+        const chart = dashboardChartInstances['chart-status'];
+        if (legendContainer && chart) {
+            legendContainer.querySelectorAll('.legend-item').forEach(el => {
+                const idx = parseInt(el.dataset.index, 10);
+                el.addEventListener('click', () => {
+                    const meta = chart.getDatasetMeta(0);
+                    if (!meta || !meta.data || !meta.data[idx]) return;
+                    // toggle hidden flag on element
+                    const currentHidden = meta.data[idx].hidden === true;
+                    meta.data[idx].hidden = !currentHidden;
+                    // Visual strike-through
+                    const labelEl = el.querySelector('.legend-label');
+                    if (labelEl) {
+                        if (meta.data[idx].hidden) labelEl.style.textDecoration = 'line-through';
+                        else labelEl.style.textDecoration = '';
+                    }
+                    chart.update();
+                });
+            });
+        }
+    } catch(e) {}
+
+    // On small screens, place legend to the right of the chart instead of below.
+    try {
+        const wrapper = document.getElementById('chart-status')?.closest('.flex');
+        if (wrapper && legendContainer) {
+            if (window.innerWidth < 768) {
+                wrapper.style.flexDirection = 'row';
+                legendContainer.style.width = '140px';
+                legendContainer.style.order = '2';
+                legendContainer.style.alignSelf = 'center';
+                legendContainer.style.marginLeft = '10px';
+            } else {
+                // Reset to original responsive behavior
+                wrapper.style.flexDirection = '';
+                legendContainer.style.width = '';
+                legendContainer.style.order = '';
+                legendContainer.style.alignSelf = '';
+                legendContainer.style.marginLeft = '';
+            }
+        }
+    } catch (e) { /* silent */ }
+
+    // Ensure chart canvas shrinks to fit beside legend on small screens (no horizontal scroll)
+    try {
+        const chartContainer = document.getElementById('chart-status')?.parentElement;
+        if (chartContainer && legendContainer) {
+            if (window.innerWidth < 768) {
+                const legendWidth = parseInt(getComputedStyle(legendContainer).width, 10) || 140;
+                // Subtract legend width + gap (12px) from available container width
+                chartContainer.style.width = `calc(100% - ${legendWidth + 12}px)`;
+                chartContainer.style.maxWidth = `calc(100% - ${legendWidth + 12}px)`;
+                // Reduce height for better fit
+                chartContainer.style.height = '200px';
+                // Reduce top/bottom spacing inside chart container for mobile
+                chartContainer.style.paddingTop = '6px';
+                chartContainer.style.paddingBottom = '6px';
+                chartContainer.style.marginTop = '0';
+                chartContainer.style.marginBottom = '0';
+                const canvas = document.getElementById('chart-status');
+                if (canvas) {
+                    canvas.style.maxHeight = '200px';
+                    canvas.style.marginTop = '0';
+                    canvas.style.marginBottom = '0';
+                    canvas.style.display = 'block';
+                }
+                // Tighten legend vertical padding to balance spacing
+                legendContainer.style.paddingTop = '4px';
+                legendContainer.style.paddingBottom = '4px';
+            } else {
+                chartContainer.style.width = '';
+                chartContainer.style.maxWidth = '';
+                chartContainer.style.height = '';
+                chartContainer.style.paddingTop = '';
+                chartContainer.style.paddingBottom = '';
+                chartContainer.style.marginTop = '';
+                chartContainer.style.marginBottom = '';
+                const canvas = document.getElementById('chart-status');
+                if (canvas) {
+                    canvas.style.maxHeight = '';
+                    canvas.style.marginTop = '';
+                    canvas.style.marginBottom = '';
+                    canvas.style.display = '';
+                }
+                legendContainer.style.paddingTop = '';
+                legendContainer.style.paddingBottom = '';
+            }
+        }
+    } catch (e) { /* silent */ }
+
+    // Ensure parent wrapper with fixed h-80 doesn't force extra space on mobile
+    try {
+        const h80Wrapper = document.getElementById('chart-status')?.closest('.h-80');
+        if (h80Wrapper) {
+            if (window.innerWidth < 768) {
+                h80Wrapper.style.height = 'auto';
+                h80Wrapper.style.minHeight = '0';
+            } else {
+                h80Wrapper.style.height = '';
+                h80Wrapper.style.minHeight = '';
+            }
+        }
+    } catch (e) {}
 
     destroyChart('chart-monthly');
     const sortedMonths = Object.keys(data.monthlyStats).sort().slice(-12);

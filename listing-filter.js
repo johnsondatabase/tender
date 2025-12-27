@@ -187,46 +187,76 @@ function checkDateRange(dateStr, rangeArray, customRange) {
 
     if (!hasPreset && !hasCustom) return true;
     if (!dateStr) return false;
+    // local parse helper YYYY-MM-DD -> Date at local midnight
+    const parseYMD = (ymd) => {
+        if (!ymd) return null;
+        const parts = String(ymd).split('-').map(n => parseInt(n, 10));
+        if (parts.length !== 3) return null;
+        return new Date(parts[0], parts[1] - 1, parts[2]);
+    };
 
     const d = new Date(dateStr);
-    const now = new Date();
     d.setHours(0,0,0,0);
-    now.setHours(0,0,0,0);
 
     if (hasCustom) {
         let matchCustom = true;
         if (customRange.start) {
-            const start = new Date(customRange.start);
-            start.setHours(0,0,0,0);
-            if (d < start) matchCustom = false;
+            const start = parseYMD(customRange.start);
+            if (start) start.setHours(0,0,0,0);
+            if (start && d < start) matchCustom = false;
         }
         if (customRange.end) {
-            const end = new Date(customRange.end);
-            end.setHours(0,0,0,0);
-            if (d > end) matchCustom = false;
+            const end = parseYMD(customRange.end);
+            if (end) end.setHours(23,59,59,999);
+            if (end && d > end) matchCustom = false;
         }
-        if (!matchCustom) return false; 
+        if (!matchCustom) return false;
     }
 
     if (!hasPreset) return true;
-    
+
+    // Helper to compute local range for presets
+    const formatLocal = (dt) => {
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, '0');
+        const day = String(dt.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    };
+    const getRangeForPreset = (preset) => {
+        const now = new Date();
+        if (preset === 'today') return { start: formatLocal(now), end: formatLocal(now) };
+        if (preset === 'week') {
+            const day = now.getDay();
+            const diffToMonday = (day + 6) % 7;
+            const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - diffToMonday); startOfWeek.setHours(0,0,0,0);
+            const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6); endOfWeek.setHours(23,59,59,999);
+            return { start: formatLocal(startOfWeek), end: formatLocal(endOfWeek) };
+        }
+        if (preset === 'month') {
+            const s = new Date(now.getFullYear(), now.getMonth(), 1);
+            const e = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            return { start: formatLocal(s), end: formatLocal(e) };
+        }
+        if (preset === 'quarter') {
+            const quarter = Math.floor(now.getMonth() / 3);
+            const s = new Date(now.getFullYear(), quarter * 3, 1);
+            const e = new Date(now.getFullYear(), quarter * 3 + 3, 0);
+            return { start: formatLocal(s), end: formatLocal(e) };
+        }
+        if (preset === 'year') {
+            const s = new Date(now.getFullYear(), 0, 1);
+            const e = new Date(now.getFullYear(), 11, 31);
+            return { start: formatLocal(s), end: formatLocal(e) };
+        }
+        return null;
+    };
+
     return rangeArray.some(range => {
-        if (range === 'today') return d.getTime() === now.getTime();
-        if (range === 'week') {
-            const day = now.getDay() || 7; 
-            const startOfWeek = new Date(now);
-            if (day !== 1) startOfWeek.setHours(-24 * (day - 1)); 
-            const endOfWeek = new Date(startOfWeek);
-            endOfWeek.setDate(startOfWeek.getDate() + 6);
-            return d >= startOfWeek && d <= endOfWeek;
-        }
-        if (range === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-        if (range === 'quarter') {
-            const currentQuarter = Math.floor(now.getMonth() / 3);
-            const dateQuarter = Math.floor(d.getMonth() / 3);
-            return currentQuarter === dateQuarter && d.getFullYear() === now.getFullYear();
-        }
-        if (range === 'year') return d.getFullYear() === now.getFullYear();
+        const r = getRangeForPreset(range);
+        if (!r) return false;
+        const s = parseYMD(r.start); if (s) s.setHours(0,0,0,0);
+        const e = parseYMD(r.end); if (e) e.setHours(23,59,59,999);
+        if (s && e) return d >= s && d <= e;
         return false;
     });
 }
@@ -333,7 +363,44 @@ function renderDateFilterUI(containerId, options, selectedValues, customValues, 
         dropdown.classList.toggle('open');
     });
 
-    // Checkbox Listeners (Presets)
+    // Helper to format local YYYY-MM-DD
+    const formatLocal = (dt) => {
+        const y = dt.getFullYear();
+        const m = String(dt.getMonth() + 1).padStart(2, '0');
+        const d = String(dt.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    };
+    // Compute start/end for a preset
+    const getRangeForPreset = (preset) => {
+        const now = new Date();
+        if (preset === 'today') return { start: formatLocal(now), end: formatLocal(now) };
+        if (preset === 'week') {
+            const day = now.getDay();
+            const diffToMonday = (day + 6) % 7;
+            const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - diffToMonday); startOfWeek.setHours(0,0,0,0);
+            const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6); endOfWeek.setHours(23,59,59,999);
+            return { start: formatLocal(startOfWeek), end: formatLocal(endOfWeek) };
+        }
+        if (preset === 'month') {
+            const s = new Date(now.getFullYear(), now.getMonth(), 1);
+            const e = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            return { start: formatLocal(s), end: formatLocal(e) };
+        }
+        if (preset === 'quarter') {
+            const quarter = Math.floor(now.getMonth() / 3);
+            const s = new Date(now.getFullYear(), quarter * 3, 1);
+            const e = new Date(now.getFullYear(), quarter * 3 + 3, 0);
+            return { start: formatLocal(s), end: formatLocal(e) };
+        }
+        if (preset === 'year') {
+            const s = new Date(now.getFullYear(), 0, 1);
+            const e = new Date(now.getFullYear(), 11, 31);
+            return { start: formatLocal(s), end: formatLocal(e) };
+        }
+        return null;
+    };
+
+    // Checkbox Listeners (Presets) — also populate custom inputs when single preset selected
     container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
         cb.addEventListener('change', () => {
             const val = cb.value;
@@ -341,6 +408,21 @@ function renderDateFilterUI(containerId, options, selectedValues, customValues, 
             if (cb.checked) newSelected.push(val);
             else newSelected = newSelected.filter(v => v !== val);
             onUpdate('preset', newSelected);
+
+            // Update custom inputs UI when exactly one preset is active
+            if (!isExpiration) {
+                const startInput = container.querySelector(`#${containerId}-start`);
+                const endInput = container.querySelector(`#${containerId}-end`);
+                if (newSelected.length === 1) {
+                    const r = getRangeForPreset(newSelected[0]);
+                    if (startInput) startInput.value = r.start || '';
+                    if (endInput) endInput.value = r.end || '';
+                } else {
+                    // Clear inputs when multiple/no presets selected
+                    if (startInput) startInput.value = customValues.start || '';
+                    if (endInput) endInput.value = customValues.end || '';
+                }
+            }
         });
     });
 
