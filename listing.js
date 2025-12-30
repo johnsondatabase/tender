@@ -40,6 +40,8 @@ export function checkPermission(action) {
     } catch(e) { return false; }
 }
 
+ 
+
 export async function notifyAdmins(title, content, actionData = null, type = 'info') {
     try {
         const { data: admins } = await sb.from('user').select('gmail').eq('phan_quyen', 'Admin');
@@ -245,11 +247,12 @@ function applyFilters() {
 export async function updateListingStatus(maThau, newStatus, silent = false) {
     if (!silent) showLoading(true);
     let error = null;
+    let submitResult = null;
 
     // If changing to Waiting (submission), show confirmation modal to enter submission details
     if (newStatus === 'Waiting' && !silent) {
         try {
-            const submitResult = await showSubmitModal(maThau);
+            submitResult = await showSubmitModal(maThau);
             // If user cancelled modal, abort
             if (!submitResult || submitResult.cancelled) {
                 if (!silent) showLoading(false);
@@ -269,11 +272,17 @@ export async function updateListingStatus(maThau, newStatus, silent = false) {
                 if (details && details.length > 0) {
                     const updates = details.map(d => {
                         const found = submitResult.materials.find(m => m.ma_vt === d.ma_vt);
-                        return {
+                        const submitted = found ? (found.submitted || 0) : 0;
+                        const updateData = {
                             ...d,
                             tinh_trang: newStatus,
-                            sl_trung: found ? (found.submitted || 0) : 0
+                            sl_trung: submitted
                         };
+                        // Khi nộp 1 phần, cập nhật quota xuống bằng số lượng nộp
+                        if (submitResult.type === 'partial') {
+                            updateData.quota = submitted;
+                        }
+                        return updateData;
                     });
                     const { error: upsertError } = await sb.from('detail').upsert(updates);
                     if (upsertError) error = upsertError;
@@ -285,7 +294,8 @@ export async function updateListingStatus(maThau, newStatus, silent = false) {
         }
     } else {
         // Default behavior for other statuses
-        const { error: listingError } = await sb.from('listing').update({ tinh_trang: newStatus }).eq('ma_thau', maThau);
+        const listingUpdate = { tinh_trang: newStatus };
+        const { error: listingError } = await sb.from('listing').update(listingUpdate).eq('ma_thau', maThau);
         if (listingError) error = listingError;
         else {
             if (newStatus === 'Fail') {
@@ -299,12 +309,26 @@ export async function updateListingStatus(maThau, newStatus, silent = false) {
     }
 
     if (!silent) showLoading(false);
-    
+
+    // Log history regardless of error status (but only if operation was attempted)
+    if (submitResult !== null || newStatus !== 'Waiting') {
+        let historyContent = `Chuyển sang trạng thái: ${newStatus}`;
+        if (newStatus === 'Waiting' && submitResult) {
+            if (submitResult.type === 'partial') {
+                historyContent += `\nNộp 1 phần với số lượng:\n${submitResult.materials.map(m => `- ${m.ma_vt}: ${m.submitted}`).join('\n')}`;
+            } else {
+                historyContent += `\nNộp toàn phần`;
+            }
+            if (submitResult.ngay_ky) historyContent += `\nNgày ký: ${submitResult.ngay_ky}`;
+            if (submitResult.ngay_ket_thuc) historyContent += `\nNgày kết thúc: ${submitResult.ngay_ket_thuc}`;
+        }
+        await logHistory(maThau, "Đổi trạng thái", historyContent);
+    }
+
     if (error) {
          if(!silent) showToast('Cập nhật thất bại: ' + error.message, 'error');
-         await fetchListings(); 
+         await fetchListings();
     } else {
-        await logHistory(maThau, "Đổi trạng thái", `Chuyển sang trạng thái: ${newStatus}`);
         if(!silent) {
             showToast(t('msg_update_success'), 'success');
             await fetchListings();

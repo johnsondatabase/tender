@@ -305,6 +305,36 @@ function setupSingleAutocomplete(inputId, listId, values, onSelect = null) {
         }, 200);
     };
     
+    // Tab-to-select: when dropdown is open, Tab picks the first suggestion and moves focus to next field
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Tab' && list.classList.contains('show')) {
+            const first = list.querySelector('li');
+            if (first) {
+                e.preventDefault();
+                isSelectionEvent = true;
+                const val = first.textContent.trim();
+                input.value = val;
+                list.classList.remove('show');
+                input.dispatchEvent(new Event('input'));
+                if (onSelect) onSelect(val);
+                // move focus to next focusable form control
+                setTimeout(() => {
+                    isSelectionEvent = false;
+                    try {
+                        const form = input.form || document.getElementById('listing-form');
+                        if (form) {
+                            const focusables = Array.from(form.querySelectorAll('input, select, textarea, button')).filter(el => !el.disabled && el.type !== 'hidden');
+                            const idx = focusables.indexOf(input);
+                            if (idx >= 0 && idx < focusables.length - 1) {
+                                focusables[idx + 1].focus();
+                            }
+                        }
+                    } catch (ex) { /* ignore focus errors */ }
+                }, 50);
+            }
+        }
+    });
+    
     if (inputId === 'l-tinh') {
         input.addEventListener('input', () => {
             const val = input.value;

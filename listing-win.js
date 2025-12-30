@@ -86,9 +86,12 @@ function renderWinMaterialList() {
             <td class="px-3 py-2 text-xs font-mono">${item.ma_vt}</td>
             <td class="px-3 py-2 text-xs">${item.quota}</td>
             <td class="px-3 py-2">
-                 <input type="number" class="w-full px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" 
-                 value="${item.sl_trung}" 
-                 onchange="window.updateWinMaterial(${idx}, this.value)">
+                 <input type="number" class="w-full px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                 value="${item.sl_trung}"
+                 max="${item.quota}"
+                 min="0"
+                 onchange="window.updateWinMaterial(${idx}, Math.min(this.value, ${item.quota}))"
+                 oninput="if(this.value > ${item.quota}) this.value = ${item.quota};">
             </td>
         `;
         container.appendChild(tr);
@@ -110,7 +113,17 @@ async function saveWinTransition() {
     }
 
     const winType = document.querySelector('input[name="win-type"]:checked').value;
-    
+
+    // Validate that sl_trung doesn't exceed quota
+    if (winType === 'partial') {
+        const invalidItems = winTransitionMaterials.filter(m => Number(m.sl_trung) > Number(m.quota));
+        if (invalidItems.length > 0) {
+            const invalidCodes = invalidItems.map(m => `${m.ma_vt} (${m.sl_trung}/${m.quota})`).join(', ');
+            showToast(`Số lượng thắng không được vượt quá quota:\n${invalidCodes}`, "error");
+            return;
+        }
+    }
+
     showLoading(true);
 
     // 1. Update Listing
@@ -167,8 +180,12 @@ async function saveWinTransition() {
         if(detailError) console.error("Detail update error", detailError);
     }
     
-    // Log
-    await logHistory(winTransitionListingId, "Win (Thắng thầu)", `Thắng thầu loại: ${winType === 'full' ? 'Toàn phần' : 'Một phần'}. Ngày ký: ${ngayKy}.`);
+    // Log detailed history for win transition
+    let historyContent = `Thắng thầu loại: ${winType === 'full' ? 'Toàn phần' : 'Một phần'}. Ngày ký: ${ngayKy}.`;
+    if (winType === 'partial') {
+        historyContent += `\nSố lượng thắng của từng vật tư:\n${winTransitionMaterials.map(m => `- ${m.ma_vt}: ${m.sl_trung}`).join('\n')}`;
+    }
+    await logHistory(winTransitionListingId, "Win (Thắng thầu)", historyContent);
 
     showLoading(false);
     document.getElementById('win-transition-modal').classList.add('hidden');
