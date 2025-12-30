@@ -1,6 +1,6 @@
 
 import { sb, showToast, showLoading, showConfirm, currentUser } from './app.js';
-import { translations, getCurrentLanguage } from './lang.js';
+import { translations, getCurrentLanguage, setLanguage } from './lang.js';
 import { logHistory } from './lichsu.js';
 
 let currentFiles = [];
@@ -77,7 +77,7 @@ function renderMaterialList(readOnly) {
                 <div class="relative group">
                     <input type="text" id="mat-input-${index}" class="w-full px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white bg-white dark:bg-gray-700" 
                         value="${item.ma_vt || ''}" 
-                        placeholder="Mã VT" 
+                        placeholder="${t('prod_ma_vt')}" 
                         autocomplete="off"
                         ${readOnly ? 'disabled' : ''}>
                     <ul id="mat-list-${index}" class="custom-dropdown-list custom-scrollbar"></ul>
@@ -442,10 +442,10 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
                             <ul id="list-quan-ly" class="custom-dropdown-list custom-scrollbar"></ul>
                         </div>
                         <div class="col-span-3 relative group input-wrapper">
-                            <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1">Đính kèm tệp</label>
+                            <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_attach">Đính kèm tệp</label>
                             <label id="btn-upload-label" class="cursor-pointer w-full bg-white dark:bg-gray-700 border border-dashed border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-300 hover:text-primary hover:border-primary hover:bg-blue-50 dark:hover:bg-gray-600 px-3 py-2 rounded flex items-center justify-center shadow-sm transition-all gap-2 h-[38px] md:h-[42px]" title="Tải tệp lên">
                                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"></path></svg>
-                                 <span class="text-sm">Chọn tệp...</span>
+                                 <span class="text-sm" data-i18n="btn_choose_file">Chọn tệp...</span>
                                  <input type="file" id="file-upload-input" multiple class="hidden">
                             </label>
                         </div>
@@ -455,15 +455,15 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
                  
                  <div class="w-full md:w-1/3 bg-gray-50 dark:bg-gray-900/50 p-4 md:p-6 flex flex-col h-auto md:h-full border-t md:border-t-0 flex-shrink-0">
                     <div class="flex justify-between items-center mb-3 flex-shrink-0">
-                        <h4 class="font-bold text-gray-700 dark:text-gray-200">Danh sách vật tư</h4>
-                        <button type="button" id="btn-add-material" class="text-xs px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> Thêm</button>
+                        <h4 class="font-bold text-gray-700 dark:text-gray-200" data-i18n="lbl_material_list">Danh sách vật tư</h4>
+                        <button type="button" id="btn-add-material" class="text-xs px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 transition-colors flex items-center"><svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg> <span data-i18n="btn_add_material">Thêm</span></button>
                     </div>
                     <div class="bg-white dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700 flex-1 flex flex-col overflow-hidden relative h-auto md:h-full">
                         <div id="material-total-header" class="bg-gray-100 dark:bg-gray-800 border-b dark:border-gray-700 p-2 flex justify-between items-center shadow-sm z-20"></div>
                         <div class="md:flex-1 md:overflow-y-auto custom-scrollbar">
                              <table class="w-full text-sm text-left">
                                 <thead class="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 uppercase text-[10px] sticky top-0 z-10 shadow-sm">
-                                    <tr><th class="px-2 py-2 pl-3">Mã VT</th><th class="px-1 py-2 w-20 text-center">Quota</th><th class="px-1 py-2 w-20 text-center">Trúng</th><th class="px-1 py-2 w-8"></th></tr>
+                                    <tr><th class="px-2 py-2 pl-3" data-i18n="prod_ma_vt">Mã VT</th><th class="px-1 py-2 w-20 text-center" data-i18n="lbl_quota">Quota</th><th class="px-1 py-2 w-20 text-center" data-i18n="lbl_won">Trúng</th><th class="px-1 py-2 w-8"></th></tr>
                                 </thead>
                                 <tbody id="material-list-body" class="divide-y divide-gray-200 dark:divide-gray-700"></tbody>
                             </table>
@@ -489,7 +489,9 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
     if (hospitalInput) hospitalInput.addEventListener('input', generateMaThau);
     
     // Removed add NPP button logic
-
+    
+    // Ensure newly injected elements get translated according to current language
+    try { setLanguage(getCurrentLanguage()); } catch (e) { /* ignore if setLanguage not available */ }
     initDraggableModal();
     await fetchAuxiliaryData();
 
@@ -611,7 +613,7 @@ export async function closeListingModal(force = false) {
     if (!force && !isReadOnlyMode) {
         const currentState = getFormState();
         if (initialFormState !== currentState) {
-            const confirmed = await showConfirm("Bạn có thay đổi chưa lưu. Bạn có chắc chắn muốn đóng?", "Xác nhận");
+            const confirmed = await showConfirm(t('confirm_unsaved_close'), t('confirm_title'));
             if (!confirmed) return;
         }
     }
@@ -643,7 +645,7 @@ export async function saveListing(e) {
 
     // --- Validation: Materials ---
     if (currentMaterials.length === 0) {
-        showToast('Danh sách vật tư không được để trống.', 'error');
+        showToast(t('err_materials_empty'), 'error');
         return;
     }
 
@@ -654,7 +656,7 @@ export async function saveListing(e) {
     );
 
     if (invalidMaterial) {
-        showToast('Vui lòng nhập đầy đủ Mã VT và Số lượng (Quota > 0) cho tất cả các dòng.', 'error');
+        showToast(t('err_materials_invalid'), 'error');
         return;
     }
 
@@ -667,7 +669,7 @@ export async function saveListing(e) {
         
         if (count > 0) {
             showLoading(false);
-            showToast(`Mã thầu "${currentId}" đã tồn tại. Vui lòng kiểm tra lại.`, 'error');
+            showToast(t('err_ma_thau_exists').replace('{id}', currentId), 'error');
             
             // Update visual indicator
             const titleCodeSpan = document.getElementById('modal-title-code');
