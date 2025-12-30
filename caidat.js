@@ -334,7 +334,7 @@ const VIEW_TEMPLATE = `
                     </div>
                     <div class="p-4 space-y-3 text-sm text-gray-600 dark:text-gray-300">
                         <div class="flex justify-between border-b dark:border-gray-700 border-dashed pb-2"><span>Developer</span><span class="font-medium text-gray-900 dark:text-white">Thai Trung Tin</span></div>
-                        <div class="flex justify-between border-b dark:border-gray-700 border-dashed pb-2"><span>Liên hệ</span><span class="font-medium text-primary">tin.thai@example.com</span></div>
+                        <div class="flex justify-between border-b dark:border-gray-700 border-dashed pb-2"><span>Liên hệ</span><span class="font-medium text-primary">whb4@its.jnj.com</span></div>
                         <div class="flex justify-between"><span>Nền tảng</span><span class="font-medium text-gray-900 dark:text-white">Supabase & JS Native</span></div>
                     </div>
                 </div>
