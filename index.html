@@ -614,9 +614,9 @@
     
     <!-- (Other modals remain the same) -->
     <div id="password-reset-modal" class="hidden fixed inset-0 z-[10000] flex items-center justify-center modal-backdrop p-4">
-            <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
-                <h3 class="text-lg font-bold text-gray-800 mb-4" data-i18n="reset_password_title">Đặt lại mật khẩu</h3>
-                <p class="text-sm text-gray-500 mb-4" data-i18n="reset_password_for">Cho tài khoản: <span id="reset-user-gmail-display" class="font-mono font-bold text-gray-700"></span></p>
+        <div class="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md">
+            <h3 class="text-lg font-bold text-gray-800 mb-4">Đặt lại mật khẩu</h3>
+            <p class="text-sm text-gray-500 mb-4">Cho tài khoản: <span id="reset-user-gmail-display" class="font-mono font-bold text-gray-700"></span></p>
             <form id="password-reset-form">
                 <input type="hidden" id="reset-user-gmail">
                 <label for="reset-new-password" class="block text-sm font-medium text-gray-700 mb-1" data-i18n="label_new_pass">Mật khẩu mới</label>
@@ -633,42 +633,42 @@
     <div id="win-transition-modal" class="hidden fixed inset-0 z-[10000] flex items-center justify-center modal-backdrop p-4">
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
             <div class="p-4 border-b dark:border-gray-700 bg-green-50 dark:bg-green-900/30">
-                <h3 class="text-lg font-bold text-green-800 dark:text-green-300" data-i18n="win_modal_title">Xác nhận Thắng Thầu (Win)</h3>
-                <p class="text-xs text-green-600 dark:text-green-400 mt-1" data-i18n="win_modal_desc">Cập nhật thông tin chi tiết trước khi hoàn tất.</p>
+                <h3 class="text-lg font-bold text-green-800 dark:text-green-300">Xác nhận Thắng Thầu (Win)</h3>
+                <p class="text-xs text-green-600 dark:text-green-400 mt-1">Cập nhật thông tin chi tiết trước khi hoàn tất.</p>
             </div>
             <div class="p-6 flex-1 overflow-y-auto">
                 <div class="mb-6">
-                    <label class="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2" data-i18n="win_type_label">Loại hình thắng thầu:</label>
+                    <label class="block text-sm font-bold text-gray-700 dark:text-gray-200 mb-2">Loại hình thắng thầu:</label>
                     <div class="flex gap-4">
                         <label class="flex items-center cursor-pointer">
                             <input type="radio" name="win-type" value="full" checked class="w-4 h-4 text-green-600 focus:ring-green-500 border-gray-300">
-                            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300" data-i18n="win_full">Win toàn phần</span>
+                            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Win toàn phần</span>
                         </label>
                         <label class="flex items-center cursor-pointer">
                             <input type="radio" name="win-type" value="partial" class="w-4 h-4 text-green-600 focus:ring-green-500 border-gray-300">
-                            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300" data-i18n="win_partial">Win 1 phần</span>
+                            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Win 1 phần</span>
                         </label>
                     </div>
                 </div>
                 <div class="grid grid-cols-2 gap-4 mb-6">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_signed_date">Ngày Ký <span class="text-red-500">*</span></label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày Ký <span class="text-red-500">*</span></label>
                         <input type="date" id="win-ngay-ky" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1" data-i18n="lbl_end_date">Ngày Kết Thúc <span class="text-red-500">*</span></label>
+                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Ngày Kết Thúc <span class="text-red-500">*</span></label>
                         <input type="date" id="win-ngay-kt" class="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-green-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white">
                     </div>
                 </div>
                 <div id="win-material-section" class="hidden">
-                    <h4 class="font-bold text-gray-700 dark:text-gray-200 text-sm mb-2" data-i18n="win_adjust_materials">Điều chỉnh số lượng trúng:</h4>
+                    <h4 class="font-bold text-gray-700 dark:text-gray-200 text-sm mb-2">Điều chỉnh số lượng trúng:</h4>
                     <div class="border rounded-lg overflow-hidden border-gray-200 dark:border-gray-700">
                         <table class="w-full text-sm text-left">
                             <thead class="bg-gray-100 dark:bg-gray-700 text-xs uppercase">
                                 <tr>
-                                    <th class="px-3 py-2" data-i18n="prod_ma_vt">Mã VT</th>
-                                    <th class="px-3 py-2 w-20" data-i18n="lbl_quota">Quota</th>
-                                    <th class="px-3 py-2 w-24" data-i18n="lbl_won">SL Trúng</th>
+                                    <th class="px-3 py-2">Mã VT</th>
+                                    <th class="px-3 py-2 w-20">Quota</th>
+                                    <th class="px-3 py-2 w-24">SL Trúng</th>
                                 </tr>
                             </thead>
                             <tbody id="win-material-list" class="divide-y divide-gray-200 dark:divide-gray-700 bg-white dark:bg-gray-800">
@@ -678,8 +678,8 @@
                 </div>
             </div>
             <div class="p-4 border-t dark:border-gray-700 flex justify-end gap-3 bg-gray-50 dark:bg-gray-800">
-                <button id="win-cancel-btn" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium" data-i18n="btn_cancel">Hủy bỏ</button>
-                <button id="win-save-btn" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-md font-medium" data-i18n="win_save">Lưu & Hoàn Tất</button>
+                <button id="win-cancel-btn" class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 font-medium">Hủy bỏ</button>
+                <button id="win-save-btn" class="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-md font-medium">Lưu & Hoàn Tất</button>
             </div>
         </div>
     </div>
@@ -705,7 +705,7 @@
     <div id="history-modal" class="hidden fixed inset-0 z-[11000] flex items-center justify-center modal-backdrop p-4">
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
             <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700 rounded-t-xl">
-                <h3 class="text-lg font-bold text-gray-800 dark:text-white" data-i18n="history_title">Lịch sử hoạt động</h3>
+                <h3 class="text-lg font-bold text-gray-800 dark:text-white">Lịch sử hoạt động</h3>
                 <button onclick="document.getElementById('history-modal').classList.add('hidden')" class="text-gray-500 hover:text-gray-700 dark:text-gray-400">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>

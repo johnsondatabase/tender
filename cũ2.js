@@ -951,7 +951,7 @@ async function processImportData(data) {
             const msg = `Hệ thống phát hiện ${duplicates.length} hồ sơ đã tồn tại (Ngày - Bệnh Viện):\n\n${duplicateListStr}\n\nBạn có muốn bỏ qua các hồ sơ trùng và chỉ nhập các hồ sơ mới không?`;
             
             showLoading(false); // Pause loading for confirm
-            const shouldProceed = await showConfirm(msg, t('dup_detect_title'));
+            const shouldProceed = await showConfirm(msg, "Phát hiện trùng lặp dữ liệu");
             showLoading(true); // Resume loading
 
             if (shouldProceed) {
@@ -1234,7 +1234,7 @@ window.closeListingModal = async function(force = false) {
     if (!force && !isReadOnlyMode) {
         const currentState = getFormState();
         if (initialFormState !== currentState) {
-            const confirmed = await showConfirm(t('confirm_unsaved_close'), t('confirm_title'));
+            const confirmed = await showConfirm("Bạn có thay đổi chưa lưu. Bạn có chắc chắn muốn đóng?", "Xác nhận");
             if (!confirmed) return;
         }
     }

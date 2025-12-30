@@ -2,12 +2,6 @@
 
 
 import { sb, showToast, showLoading, showConfirm, currentUser } from './app.js';
-import { translations, getCurrentLanguage } from './lang.js';
-
-const t = (key) => {
-    const lang = getCurrentLanguage();
-    return translations[lang][key] || key;
-};
 
 // Removed import { notifyAdmins, fetchListings } from './listing.js' to fix circular dependency.
 // Use window.notifyAdmins and window.fetchListings instead.
@@ -183,7 +177,7 @@ async function processImportData(data) {
             msg += `\n\nBạn có muốn bỏ qua các hồ sơ trùng không?`;
 
             showLoading(false);
-            const shouldProceed = await showConfirm(msg, t('dup_detect_title'));
+            const shouldProceed = await showConfirm(msg, "Phát hiện trùng lặp");
             showLoading(true);
 
             if (shouldProceed) {

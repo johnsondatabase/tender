@@ -47,26 +47,16 @@ export function showToast(message, type = 'info') {
     }, 3000);
 }
 
-export function showConfirm(message, title = null) {
+export function showConfirm(message, title = 'Xác nhận hành động') {
     return new Promise(resolve => {
         const modal = document.getElementById('confirm-modal');
         const titleEl = document.getElementById('confirm-title');
         const messageEl = document.getElementById('confirm-message');
         const okBtn = document.getElementById('confirm-ok-btn');
         const cancelBtn = document.getElementById('confirm-cancel-btn');
-        const lang = getCurrentLanguage();
-        // Resolve title: prefer translated title key if exists, otherwise use provided title,
-        // otherwise fall back to translation for 'confirm_title'
-        let titleText = title;
-        if (title && translations[lang] && translations[lang][title]) titleText = translations[lang][title];
-        if (!titleText) titleText = (translations[lang] && translations[lang]['confirm_title']) ? translations[lang]['confirm_title'] : 'Confirm';
 
-        // Resolve message: if it's a translation key, use translation; otherwise use as-is
-        let messageText = message;
-        if (message && translations[lang] && translations[lang][message]) messageText = translations[lang][message];
-
-        titleEl.textContent = titleText;
-        messageEl.textContent = messageText;
+        titleEl.textContent = title;
+        messageEl.textContent = message;
 
         const cleanup = (result) => {
             modal.classList.add('hidden');

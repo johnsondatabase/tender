@@ -2,13 +2,7 @@
 
 
 import { sb, cache, currentUser, setCurrentUser, showLoading, showToast, showConfirm, DEFAULT_AVATAR_URL, updateSidebarAvatar, sanitizeFileName, onlineUsers, handleLogout } from './app.js';
-import { translations, setLanguage, getCurrentLanguage } from './lang.js';
-
-// Helper Translation
-const t = (key) => {
-    const lang = getCurrentLanguage();
-    return (translations[lang] && translations[lang][key]) ? translations[lang][key] : key;
-};
+import { setLanguage, getCurrentLanguage } from './lang.js';
 
 let selectedAvatarFile = null;
 let isViewLoaded = false;
@@ -214,7 +208,7 @@ const VIEW_TEMPLATE = `
                     <div class="mt-3 text-xs text-gray-400 text-center">
                         Max: 1 MB<br>Format: .JPEG, .PNG
                     </div>
-    <button type="button" id="profile-remove-image-btn" class="hidden mt-2 text-xs text-red-500 hover:underline" data-i18n="btn_remove_img">Xóa ảnh</button>
+                    <button type="button" id="profile-remove-image-btn" class="hidden mt-2 text-xs text-red-500 hover:underline">Xóa ảnh</button>
                     <input type="hidden" id="profile-current-avatar-url">
                 </div>
             </div>
@@ -227,7 +221,7 @@ const VIEW_TEMPLATE = `
             <h2 class="text-xl font-medium text-gray-800 dark:text-white" data-i18n="settings_admin">Quản lý Người Dùng</h2>
         </div>
         <div class="flex-1 border rounded-sm bg-gray-50 dark:bg-gray-900 dark:border-gray-700 overflow-hidden flex flex-col min-h-[300px]">
-            <div class="bg-white dark:bg-gray-800 p-3 border-b dark:border-gray-700 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider"></div>
+            <div class="bg-white dark:bg-gray-800 p-3 border-b dark:border-gray-700 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Danh sách tài khoản</div>
             <div id="user-list-body" class="overflow-y-auto p-0 flex-1 h-full"></div>
         </div>
     </div>
@@ -334,7 +328,7 @@ const VIEW_TEMPLATE = `
                     </div>
                     <div class="p-4 space-y-3 text-sm text-gray-600 dark:text-gray-300">
                         <div class="flex justify-between border-b dark:border-gray-700 border-dashed pb-2"><span>Developer</span><span class="font-medium text-gray-900 dark:text-white">Thai Trung Tin</span></div>
-                        <div class="flex justify-between border-b dark:border-gray-700 border-dashed pb-2"><span>Liên hệ</span><span class="font-medium text-primary">whb4@its.jnj.com</span></div>
+                        <div class="flex justify-between border-b dark:border-gray-700 border-dashed pb-2"><span>Liên hệ</span><span class="font-medium text-primary">tin.thai@example.com</span></div>
                         <div class="flex justify-between"><span>Nền tảng</span><span class="font-medium text-gray-900 dark:text-white">Supabase & JS Native</span></div>
                     </div>
                 </div>
@@ -357,25 +351,25 @@ const VIEW_TEMPLATE = `
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[80vh]">
         <div class="p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700 rounded-t-xl">
             <div>
-                <h3 class="text-lg font-bold text-gray-800 dark:text-white" data-i18n="viewer_config_title">Cấu hình xem dữ liệu</h3>
-                <p id="viewer-user-gmail" class="text-sm text-gray-500 dark:text-gray-400 mt-1" data-i18n="viewer_config_desc"></p>
+                <h3 class="text-lg font-bold text-gray-800 dark:text-white">Cấu hình xem dữ liệu</h3>
+                <p id="viewer-user-gmail" class="text-sm text-gray-500 dark:text-gray-400 mt-1"></p>
             </div>
             <button id="close-viewer-btn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
                 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>
         </div>
-            <div class="p-3 border-b dark:border-gray-700 bg-white dark:bg-gray-800">
-            <input type="text" id="viewer-search" placeholder="${t('viewer_search_placeholder')}" data-i18n="viewer_search_placeholder" class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-1 focus:ring-blue-500 outline-none">
+        <div class="p-3 border-b dark:border-gray-700 bg-white dark:bg-gray-800">
+            <input type="text" id="viewer-search" placeholder="Tìm kiếm người dùng/PSR..." class="w-full px-3 py-2 border rounded-lg text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:ring-1 focus:ring-blue-500 outline-none">
         </div>
         <div class="flex-1 overflow-y-auto p-4 custom-scrollbar bg-white dark:bg-gray-800">
             <div id="viewer-list-container" class="space-y-2">
                 <!-- Checkboxes injected here -->
-                <div class="text-center text-gray-500 text-sm" data-i18n="viewer_no_data">Đang tải danh sách...</div>
+                <div class="text-center text-gray-500 text-sm">Đang tải danh sách...</div>
             </div>
         </div>
         <div class="p-4 border-t dark:border-gray-700 flex justify-end gap-3 bg-gray-50 dark:bg-gray-800 rounded-b-xl">
-            <button id="cancel-viewer-btn" class="px-4 py-2 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 font-medium text-sm" data-i18n="btn_cancel">Hủy</button>
-            <button id="save-viewer-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md text-sm" data-i18n="viewer_save_config">Lưu cấu hình</button>
+            <button id="cancel-viewer-btn" class="px-4 py-2 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 font-medium text-sm">Hủy</button>
+            <button id="save-viewer-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-md text-sm">Lưu cấu hình</button>
         </div>
     </div>
 </div>
@@ -423,7 +417,7 @@ export async function initCaiDatView() {
     const logoutBtns = document.querySelectorAll('#logout-btn, #logout-btn-desktop');
     logoutBtns.forEach(btn => {
         btn.onclick = async () => {
-            const confirmed = await showConfirm(t('confirm_logout'), t('confirm_title'));
+            const confirmed = await showConfirm('Bạn có chắc chắn muốn đăng xuất?', 'Xác nhận');
             if (confirmed) {
                 handleLogout();
             }
@@ -444,10 +438,7 @@ export async function initCaiDatView() {
 
     const cancelResetBtn = document.getElementById('cancel-reset-btn');
     if (cancelResetBtn) {
-        cancelResetBtn.onclick = () => {
-            const modal = document.getElementById('password-reset-modal');
-            if (modal) modal.classList.add('hidden');
-        };
+        cancelResetBtn.onclick = () => document.getElementById('password-reset-modal').classList.add('hidden');
     }
     
     // Permission Modal Listeners
@@ -946,30 +937,22 @@ function renderUserList(users) {
             onlineIndicatorHtml = `<span class="absolute bottom-0 right-0 block h-3 w-3 rounded-full ${statusColor} border-2 border-white dark:border-gray-800 ring-1 ring-gray-300 dark:ring-gray-600"></span>`;
         }
         
-        // Map stored status to translation key and badge class
-        const mapStatusToKey = (st) => {
-            if (!st) return 'usr_status_pending';
-            if (st === 'Đã Duyệt' || st === 'Approved') return 'usr_status_approved';
-            if (st === 'Khóa' || st === 'Locked') return 'usr_status_locked';
-            return 'usr_status_pending';
-        };
-        const statusKey = mapStatusToKey(user.stt);
         let gmailClass = '';
-        switch (statusKey) {
-            case 'usr_status_approved': gmailClass = 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'; break;
-            case 'usr_status_locked': gmailClass = 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'; break;
-            default: gmailClass = 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'; break;
+        let statusText = user.stt || 'Chờ Duyệt';
+        switch (statusText) {
+            case 'Đã Duyệt': gmailClass = 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300'; break;
+            case 'Khóa': gmailClass = 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300'; break;
+            default: gmailClass = 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'; statusText = 'Chờ Duyệt';
         }
-        const statusText = t(statusKey);
 
         let statusOptionsHtml = '';
         if (user.stt === 'Khóa') {
-            statusOptionsHtml += `<button class="user-status-option block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700" data-gmail="${user.gmail}" data-status="Đã Duyệt">${t('btn_unlock')}</button>`;
+            statusOptionsHtml += `<button class="user-status-option block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700" data-gmail="${user.gmail}" data-status="Đã Duyệt">Mở Khóa</button>`;
         } else {
             if (user.stt !== 'Đã Duyệt') {
-                statusOptionsHtml += `<button class="user-status-option block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700" data-gmail="${user.gmail}" data-status="Đã Duyệt">${t('btn_approve')}</button>`;
+                statusOptionsHtml += `<button class="user-status-option block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700" data-gmail="${user.gmail}" data-status="Đã Duyệt">Duyệt</button>`;
             }
-            statusOptionsHtml += `<button class="user-status-option block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700" data-gmail="${user.gmail}" data-status="Khóa">${t('btn_lock')}</button>`;
+            statusOptionsHtml += `<button class="user-status-option block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-700" data-gmail="${user.gmail}" data-status="Khóa">Khóa</button>`;
         }
 
         const isPermDisabled = isCurrentUser || isAdmin;
@@ -1011,14 +994,14 @@ function renderUserList(users) {
                         <option value="User" ${user.phan_quyen === 'User' ? 'selected' : ''}>User</option>
                         <option value="View" ${user.phan_quyen === 'View' ? 'selected' : ''}>View</option>
                     </select>
-                    <button data-gmail="${user.gmail}" class="viewer-config-btn text-xs ${viewerBtnClass} font-medium px-3 py-2 rounded border transition-colors whitespace-nowrap" title="${t('viewer_config_title') || 'Cấu hình xem dữ liệu'}">
-                        ${t('btn_data') || 'Data'} (${viewerCount})
+                    <button data-gmail="${user.gmail}" class="viewer-config-btn text-xs ${viewerBtnClass} font-medium px-3 py-2 rounded border transition-colors whitespace-nowrap" title="Cấu hình xem dữ liệu">
+                        Data (${viewerCount})
                     </button>
-                    <button data-gmail="${user.gmail}" class="reset-password-btn text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/50 dark:text-indigo-300 dark:hover:bg-indigo-800/50 font-medium px-3 py-2 rounded border border-indigo-100 dark:border-indigo-800 transition-colors whitespace-nowrap" ${isCurrentUser ? 'disabled' : ''} title="${t('reset_password_title') || 'Đặt lại mật khẩu'}">
-                        ${t('btn_reset_pass')}
+                    <button data-gmail="${user.gmail}" class="reset-password-btn text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:bg-indigo-900/50 dark:text-indigo-300 dark:hover:bg-indigo-800/50 font-medium px-3 py-2 rounded border border-indigo-100 dark:border-indigo-800 transition-colors whitespace-nowrap" ${isCurrentUser ? 'disabled' : ''}>
+                        Đặt lại MK
                     </button>
-                    <button data-gmail="${user.gmail}" class="permission-btn text-xs ${permBtnClass} font-medium px-3 py-2 rounded border transition-colors whitespace-nowrap" ${isPermDisabled ? 'disabled' : ''} title="${t('perm_title')}">
-                        ${t('btn_permission') || t('perm_title') || 'Phân quyền'}
+                    <button data-gmail="${user.gmail}" class="permission-btn text-xs ${permBtnClass} font-medium px-3 py-2 rounded border transition-colors whitespace-nowrap" ${isPermDisabled ? 'disabled' : ''} data-i18n="btn_permission">
+                        Phân quyền
                     </button>
                     <div class="relative">
                         <button data-gmail="${user.gmail}" class="user-options-btn p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors" ${isCurrentUser ? 'disabled' : ''}>
@@ -1027,7 +1010,7 @@ function renderUserList(users) {
                         <div id="options-popover-${safeGmail}" class="hidden absolute right-0 mt-2 w-40 bg-white dark:bg-gray-700 rounded-lg shadow-xl py-1 z-20 border border-gray-100 dark:border-gray-600 ring-1 ring-black ring-opacity-5">
                             ${statusOptionsHtml}
                             <div class="border-t border-gray-100 dark:border-gray-600 my-1"></div>
-                            <button class="user-delete-option block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20" data-gmail="${user.gmail}">${t('btn_delete_acc')}</button>
+                            <button class="user-delete-option block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20" data-gmail="${user.gmail}">Xóa Tài Khoản</button>
                         </div>
                     </div>
                 </div>
@@ -1075,22 +1058,8 @@ async function openViewerModal(user) {
 
     titleUser.textContent = `${user.ho_ten} (${user.gmail})`;
     searchInput.value = ''; // Reset search
-    container.innerHTML = `<div class="text-center text-gray-500 text-sm py-4">${t('loading')}</div>`;
+    container.innerHTML = '<div class="text-center text-gray-500 text-sm py-4">Đang tải danh sách...</div>';
     modal.classList.remove('hidden');
-    // Re-apply translations to dynamic elements inside modal
-    setLanguage(getCurrentLanguage());
-    // Ensure dynamic texts inside modal are translated
-    setLanguage(getCurrentLanguage());
-    // Force-translate key UI elements inside viewer modal (title, placeholder, buttons)
-    try {
-        const modalTitleEl = document.querySelector('#viewer-modal [data-i18n="viewer_config_title"]') || document.querySelector('#viewer-modal h3');
-        if (modalTitleEl) modalTitleEl.textContent = t('viewer_config_title');
-        if (searchInput) searchInput.placeholder = t('viewer_search_placeholder');
-        const cancelViewerBtn = document.getElementById('cancel-viewer-btn');
-        const saveViewerBtn = document.getElementById('save-viewer-btn');
-        if (cancelViewerBtn) cancelViewerBtn.textContent = t('btn_cancel');
-        if (saveViewerBtn) saveViewerBtn.textContent = t('viewer_save_config');
-    } catch (e) { console.warn('viewer translate error', e); }
 
     const options = await fetchViewerSourceData();
     
@@ -1111,7 +1080,7 @@ function renderViewerList(options, selectedItems) {
     container.innerHTML = '';
 
     if (options.length === 0) {
-        container.innerHTML = `<div class="text-center text-gray-500 text-sm">${t('txt_no_data')}</div>`;
+        container.innerHTML = '<div class="text-center text-gray-500 text-sm">Không có dữ liệu để chọn.</div>';
         return;
     }
 
@@ -1206,8 +1175,16 @@ function openPermissionModal(user) {
         xuat: safeParse(user.xuat)
     };
 
+    const lang = getCurrentLanguage();
+    const translations = {
+        'header_dashboard': { vi: 'Tổng quan', en: 'Dashboard' },
+        'header_listing': { vi: 'Danh sách', en: 'Listing' }, 
+        'header_detail': { vi: 'Chi tiết', en: 'Detail' },
+        'header_product': { vi: 'Sản phẩm', en: 'Product' }
+    };
+
     APP_VIEWS.forEach(view => {
-        const label = t(view.labelI18n);
+        const label = translations[view.labelI18n] ? translations[view.labelI18n][lang] : view.id;
         
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors';
@@ -1239,21 +1216,6 @@ function openPermissionModal(user) {
     });
 
     modal.classList.remove('hidden');
-    // Ensure dynamic texts inside modal are translated
-    setLanguage(getCurrentLanguage());
-    // Force-translate permission modal headers and buttons
-    try {
-        const headerEl = document.querySelector('#permission-modal [data-i18n="perm_title"]') || document.querySelector('#permission-modal h3');
-        if (headerEl) headerEl.textContent = t('perm_title');
-        ['perm_screen','perm_view','perm_add','perm_edit','perm_delete','perm_import','perm_export'].forEach(key => {
-            const el = document.querySelector(`#permission-modal [data-i18n="${key}"]`);
-            if (el) el.textContent = t(key);
-        });
-        const cancelPermBtn = document.getElementById('cancel-perm-btn');
-        const savePermBtn = document.getElementById('save-perm-btn');
-        if (cancelPermBtn) cancelPermBtn.textContent = t('btn_cancel');
-        if (savePermBtn) savePermBtn.textContent = t('btn_save');
-    } catch (e) { console.warn('permission translate error', e); }
 }
 
 function closePermissionModal() {
@@ -1310,7 +1272,7 @@ async function handleRoleChange(e) {
     const newRole = e.target.value;
     const originalRole = cache.userList.find(u => u.gmail === gmail)?.phan_quyen;
     if (!originalRole) return;
-    const confirmed = await showConfirm(t('confirm_change_role').replace('{gmail}', gmail).replace('{role}', newRole), t('confirm_title'));
+    const confirmed = await showConfirm(`Bạn có muốn đổi quyền của ${gmail} thành ${newRole}?`);
     if (!confirmed) {
         e.target.value = originalRole; 
         return;
@@ -1342,7 +1304,7 @@ async function handleUpdateUserStatus(gmail, newStatus) {
 async function handleDeleteUser(gmail) {
     const userToDelete = cache.userList.find(u => u.gmail === gmail);
     if (!userToDelete) return;
-    const confirmed = await showConfirm(t('confirm_delete_account').replace('{name}', userToDelete.ho_ten), t('confirm_title'));
+    const confirmed = await showConfirm(`Bạn có chắc muốn xóa vĩnh viễn tài khoản của ${userToDelete.ho_ten}? Hành động này không thể hoàn tác.`);
     if (!confirmed) return;
     showLoading(true);
     try {
@@ -1362,16 +1324,9 @@ async function handleDeleteUser(gmail) {
 }
 
 function openPasswordResetModal(gmail) {
-    const modal = document.getElementById('password-reset-modal');
-    if (!modal) {
-        console.error('password-reset-modal not found in DOM');
-        return;
-    }
-    const input = modal.querySelector('#reset-user-gmail');
-    const display = modal.querySelector('#reset-user-gmail-display');
-    if (input) input.value = gmail;
-    if (display) display.textContent = gmail;
-    modal.classList.remove('hidden');
+    document.getElementById('reset-user-gmail').value = gmail;
+    document.getElementById('reset-user-gmail-display').textContent = gmail;
+    document.getElementById('password-reset-modal').classList.remove('hidden');
 }
 
 async function handlePasswordReset(e) {
@@ -1385,10 +1340,8 @@ async function handlePasswordReset(e) {
         showToast("Đặt lại mật khẩu thất bại.", 'error');
     } else {
         showToast("Đặt lại mật khẩu thành công.", 'success');
-        const modal = document.getElementById('password-reset-modal');
-        if (modal) modal.classList.add('hidden');
-        const form = document.getElementById('password-reset-form');
-        if (form) form.reset();
+        document.getElementById('password-reset-modal').classList.add('hidden');
+        document.getElementById('password-reset-form').reset();
     }
 }
 

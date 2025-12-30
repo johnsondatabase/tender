@@ -252,12 +252,12 @@ export function onShowProductView(params = null) {
                 <!-- Date Filter Scrollable Area -->
                 <div class="flex-1 overflow-x-auto no-scrollbar mx-1 w-full md:w-auto order-3 md:order-2 border-t md:border-t-0 pt-2 md:pt-0 border-gray-200 dark:border-gray-700 md:border-none">
                     <div class="flex items-center gap-1.5 min-w-max">
-                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap bg-white dark:bg-gray-600 text-blue-600 shadow-sm border border-gray-200 dark:border-gray-500" data-type="all">${t('opt_all')}</button>
-                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="today">${t('opt_today')}</button>
-                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="week">${t('opt_week')}</button>
-                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="month">${t('opt_month')}</button>
-                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="quarter">${t('opt_quarter')}</button>
-                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="year">${t('opt_year')}</button>
+                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap bg-white dark:bg-gray-600 text-blue-600 shadow-sm border border-gray-200 dark:border-gray-500" data-type="all">Tất cả</button>
+                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="today">Hôm nay</button>
+                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="week">Tuần này</button>
+                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="month">Tháng này</button>
+                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="quarter">Quý này</button>
+                        <button class="prod-date-btn px-2.5 py-1.5 text-xs font-medium rounded transition-colors whitespace-nowrap text-gray-500 dark:text-gray-400 hover:bg-white dark:hover:bg-gray-600 hover:text-gray-700 dark:hover:text-gray-200" data-type="year">Năm nay</button>
                         
                         <div class="h-4 w-px bg-gray-300 dark:bg-gray-600 mx-1"></div>
                         
@@ -571,7 +571,7 @@ function setupProductDateFilterListeners() {
             updateActiveButton('custom'); 
             recalcProductData();
         } else {
-            showToast(t('select_dates_error'), "info");
+            showToast("Vui lòng chọn cả ngày bắt đầu và kết thúc.", "info");
         }
     });
 }
@@ -616,8 +616,7 @@ async function fetchProductData(silent = false) {
     if(!silent) showLoading(false);
 
     if (pErr || dErr) {
-        const msg = (pErr?.message || dErr?.message) || '';
-        showToast(t('err_load_data').replace('{msg}', msg), 'error');
+        showToast('Lỗi tải dữ liệu: ' + (pErr?.message || dErr?.message), 'error');
         return;
     }
 
@@ -807,7 +806,7 @@ function initHandsontable() {
             const colProp = hot.colToProp(coords.col);
 
             if (colProp === 'ma_vt' && rowData.ma_vt) {
-                const confirmed = await showConfirm(t('confirm_view_tender_detail'), t('confirm_title'));
+                const confirmed = await showConfirm(t('confirm_view_tender_detail'), 'View Details');
                 if (confirmed) {
                     showView('view-chi-tiet', { filterCode: rowData.ma_vt });
                 }
@@ -832,7 +831,7 @@ function initHandsontable() {
                 try {
                     const { error } = await sb.from('product').update({ [prop]: newVal }).eq('ma_vt', maVt);
                     if (error) {
-                        showToast(t('prod_update_error').replace('{msg}', error.message), 'error');
+                        showToast('Lỗi cập nhật: ' + error.message, 'error');
                         fetchProductData(true); 
                     }
                 } catch (e) { console.error(e); }
@@ -846,16 +845,16 @@ function initHandsontable() {
                 if(rowData && rowData.ma_vt) maVtsToDelete.push(rowData.ma_vt);
             });
             if (maVtsToDelete.length > 0) {
-                const confirmed = await showConfirm(t('confirm_delete_items').replace('{n}', maVtsToDelete.length), t('confirm_title'));
+                const confirmed = await showConfirm(`Bạn có chắc muốn xóa ${maVtsToDelete.length} sản phẩm?`);
                 if (!confirmed) return false; 
                 showLoading(true);
                 const { error } = await sb.from('product').delete().in('ma_vt', maVtsToDelete);
                 showLoading(false);
                 if (error) {
-                    showToast(t('prod_delete_error').replace('{msg}', error.message), 'error');
+                    showToast('Lỗi xóa: ' + error.message, 'error');
                     return false;
                 } else {
-                    showToast(t('prod_delete_success'), 'success');
+                    showToast('Đã xóa thành công', 'success');
                 }
             }
         }
@@ -873,16 +872,16 @@ function updateBulkDeleteButton() {
 async function deleteSelectedProducts() {
     const selectedItems = allData.filter(d => d.selected === true);
     if (selectedItems.length === 0) return;
-    const confirmed = await showConfirm(t('confirm_delete_selected').replace('{n}', selectedItems.length), t('confirm_title'));
+    const confirmed = await showConfirm(`Bạn có chắc chắn muốn xóa ${selectedItems.length} sản phẩm đã chọn?`);
     if (!confirmed) return;
     showLoading(true);
     const ids = selectedItems.map(i => i.ma_vt);
     const { error } = await sb.from('product').delete().in('ma_vt', ids);
     showLoading(false);
     if (error) {
-        showToast(t('prod_delete_error').replace('{msg}', error.message), "error");
+        showToast("Lỗi xóa sản phẩm: " + error.message, "error");
     } else {
-        showToast(t('prod_delete_success'), "success");
+        showToast("Đã xóa thành công.", "success");
         document.getElementById('btn-delete-selected').classList.add('hidden');
         fetchProductData();
     }
@@ -1211,9 +1210,9 @@ function handleProductImport(event) {
             if(inserts.length === 0) throw new Error("Không tìm thấy cột 'Mã VT' hoặc dữ liệu hợp lệ.");
             const { error } = await sb.from('product').upsert(inserts, { onConflict: 'ma_vt', ignoreDuplicates: true });
             if (error) throw error;
-            showToast(t('import_success'), 'success');
+            showToast(`Đã import ${inserts.length} dòng thành công.`, 'success');
             fetchProductData();
-        } catch (error) { showToast(t('import_error').replace('{msg}', error.message), "error"); } 
+        } catch (error) { showToast("Lỗi import: " + error.message, "error"); } 
         finally { showLoading(false); event.target.value = ''; }
     };
     reader.readAsArrayBuffer(file);
@@ -1263,8 +1262,8 @@ function exportToExcel(type) {
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "SanPham");
             XLSX.writeFile(wb, `Product_Export_${type}.xlsx`);
-            showToast(t('export_success'), "success");
-        } catch (e) { showToast(t('export_error').replace('{msg}', e.message), "error"); } 
+            showToast("Xuất Excel thành công!", "success");
+        } catch (e) { showToast("Lỗi khi xuất Excel: " + e.message, "error"); } 
         finally { showLoading(false); }
     }, 100);
 }
@@ -1335,8 +1334,8 @@ function setupAddProductFormListeners() {
         const nganh = document.getElementById('new-nganh').value;
         const group_product = document.getElementById('new-group').value;
 
-    if (allData.some(i => i.ma_vt === ma_vt)) {
-            showToast(t('prod_code_exists'), 'error');
+        if (allData.some(i => i.ma_vt === ma_vt)) {
+            showToast('Mã vật tư đã tồn tại.', 'error');
             return;
         }
 
@@ -1366,9 +1365,9 @@ function setupAddProductFormListeners() {
         showLoading(false);
 
         if (error) {
-            showToast(t('prod_update_error').replace('{msg}', error.message), 'error');
+            showToast('Lỗi thêm mới: ' + error.message, 'error');
         } else {
-            showToast(t('prod_add_success'), 'success');
+            showToast('Thêm mới thành công', 'success');
             closeAddModal();
             fetchProductData();
         }
@@ -1526,7 +1525,7 @@ function renderImageGrid() {
                 showLoading(false);
                 
                 if (error) {
-                    showToast(t('prod_update_error').replace('{msg}', error.message), 'error');
+                    showToast("Lỗi cập nhật vị trí: " + error.message, 'error');
                     renderImageGrid();
                 } else {
                     currentManagingProduct.url_hinh_anh = JSON.stringify(images);
@@ -1574,7 +1573,7 @@ async function uploadImages(fileList) {
         const { error } = await sb.from('product').update({ url_hinh_anh: JSON.stringify(combined) }).eq('ma_vt', currentManagingProduct.ma_vt);
         
         if (error) {
-            showToast(t('prod_update_error').replace('{msg}', error.message), 'error');
+            showToast("Lỗi cập nhật: " + error.message, 'error');
         } else {
             currentManagingProduct.url_hinh_anh = JSON.stringify(combined); 
             renderImageGrid();
@@ -1586,7 +1585,7 @@ async function uploadImages(fileList) {
 
 async function deleteImage(index) {
     if (!currentManagingProduct) return;
-    const confirmed = await showConfirm(t('confirm_delete_image'), t('confirm_title'));
+    const confirmed = await showConfirm("Bạn có chắc muốn xóa ảnh này?");
     if (!confirmed) return;
 
     let existingImages = [];
@@ -1629,7 +1628,7 @@ async function downloadAllImages() {
     } catch(e) { return; }
 
     if (images.length === 0) {
-        showToast(t('no_images'), 'info');
+        showToast("Không có ảnh để tải.", 'info');
         return;
     }
 
@@ -1662,10 +1661,10 @@ async function downloadAllImages() {
         link.click();
         URL.revokeObjectURL(link.href);
         
-        showToast(t('download_complete'), 'success');
+        showToast("Tải xuống hoàn tất.", 'success');
     } catch (error) {
         console.error(error);
-        showToast(t('zip_error'), 'error');
+        showToast("Lỗi khi tạo file zip.", 'error');
     } finally {
         showLoading(false);
     }
