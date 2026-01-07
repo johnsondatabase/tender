@@ -13,31 +13,31 @@ const t = (key) => {
 export const COLUMNS = {
     'Listing': { 
         labelKey: 'col_listing', 
-        borderColor: 'border-gray-400', 
-        bgColor: 'bg-gray-50', 
+        borderColor: 'border-gray-300', 
+        bgColor: 'bg-gray-100', 
         darkBgColor: 'dark:bg-gray-800',
-        badgeColor: 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+        badgeColor: 'bg-gray-300 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
     },
     'Waiting': { 
         labelKey: 'col_waiting', 
-        borderColor: 'border-yellow-400', 
-        bgColor: 'bg-yellow-50', 
+        borderColor: 'border-yellow-500', 
+        bgColor: 'bg-yellow-100', 
         darkBgColor: 'dark:bg-yellow-900/20',
-        badgeColor: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
+        badgeColor: 'bg-yellow-200 text-yellow-900 dark:bg-yellow-900 dark:text-yellow-300'
     },
     'Win': { 
         labelKey: 'col_win', 
-        borderColor: 'border-green-500', 
-        bgColor: 'bg-green-50', 
+        borderColor: 'border-green-600', 
+        bgColor: 'bg-green-100', 
         darkBgColor: 'dark:bg-green-900/20',
-        badgeColor: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+        badgeColor: 'bg-green-200 text-green-900 dark:bg-green-900 dark:text-green-300'
     },
     'Fail': { 
         labelKey: 'col_fail', 
-        borderColor: 'border-red-500', 
-        bgColor: 'bg-red-50', 
+        borderColor: 'border-red-600', 
+        bgColor: 'bg-red-100', 
         darkBgColor: 'dark:bg-red-900/20',
-        badgeColor: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
+        badgeColor: 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-300'
     }
 };
 
@@ -68,13 +68,31 @@ export function renderBoard(data, currentMobileStatus) {
         if(mobileCount) mobileCount.textContent = '0 (0%)';
     });
 
+    // Group items by status so we can sort per-column before rendering
+    const groups = {};
+    Object.keys(COLUMNS).forEach(s => groups[s] = []);
     data.forEach(item => {
         let status = item.tinh_trang;
-        if (!COLUMNS[status]) status = 'Listing'; // Default fallback to Listing if status unknown
+        if (!COLUMNS[status]) status = 'Listing';
+        groups[status].push(item);
+    });
+
+    // Sort all columns by date descending (newest first) so Waiting/Win/Fail also show newest first
+    Object.keys(groups).forEach(status => {
+        groups[status].sort((a, b) => {
+            const da = a.ngay ? new Date(a.ngay).getTime() : 0;
+            const db = b.ngay ? new Date(b.ngay).getTime() : 0;
+            return db - da;
+        });
+    });
+
+    Object.keys(groups).forEach(status => {
         const col = document.getElementById(`col-${status}`);
         if (col) {
-            const card = createCard(item);
-            col.appendChild(card);
+            groups[status].forEach(item => {
+                const card = createCard(item);
+                col.appendChild(card);
+            });
         }
     });
 
@@ -304,6 +322,8 @@ function initSortable() {
                 }
 
                 if (newStatus !== oldStatus) {
+                    // (previous behavior) rely on fetchListings refresh order; do not forcibly insert to avoid flicker
+
                     if (oldStatus === 'Listing' && newStatus !== 'Waiting') {
                         showToast("Chỉ có thể chuyển hồ sơ Listing sang trạng thái Waiting (Nộp thầu).", "error");
                         if(window.fetchListings) window.fetchListings(true); 
