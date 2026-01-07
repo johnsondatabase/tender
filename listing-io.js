@@ -358,6 +358,48 @@ async function processImportData(data) {
 
     const groups = {};
     
+    // Helper: parse various Excel date representations into ISO yyyy-mm-dd or null
+    function parseExcelDate(val) {
+        if (val === null || val === undefined || String(val).trim() === '') return null;
+        // Excel serial number
+        if (typeof val === 'number') {
+            const dateObj = new Date(Math.round((val - 25569) * 86400 * 1000));
+            return dateObj.toISOString().split('T')[0];
+        }
+        if (typeof val === 'string') {
+            const s = val.trim();
+            // If multiple dates concatenated, take first
+            const first = s.split(/[,;\n]+/)[0].trim();
+            // dd/mm/yyyy or d/m/yyyy
+            let m = first.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+            if (m) {
+                let d = m[1].padStart(2,'0'), mo = m[2].padStart(2,'0'), y = m[3];
+                if (y.length === 2) y = '20' + y;
+                return `${y}-${mo}-${d}`;
+            }
+            // dd/Mon/yyyy where Mon is month name short or full (e.g. 01/Aug/2022)
+            m = first.match(/^(\d{1,2})[\/\-]([A-Za-z]+)[\/\-](\d{2,4})$/);
+            if (m) {
+                const monthNames = {
+                    jan: '01', january: '01', feb: '02', february: '02', mar: '03', march: '03',
+                    apr: '04', april: '04', may: '05', jun: '06', june: '06', jul: '07', july: '07',
+                    aug: '08', august: '08', sep: '09', sept: '09', september: '09', oct: '10', october: '10',
+                    nov: '11', november: '11', dec: '12', december: '12'
+                };
+                const d = m[1].padStart(2,'0');
+                const mon = m[2].toLowerCase();
+                const mo = monthNames[mon];
+                let y = m[3];
+                if (y.length === 2) y = '20' + y;
+                if (mo) return `${y}-${mo}-${d}`;
+            }
+            // try Date parsing as last resort
+            const dObj = new Date(first);
+            if (!isNaN(dObj.getTime())) return dObj.toISOString().split('T')[0];
+            return null;
+        }
+        return null;
+    }
     // Validation data
     const validProvinces = [...new Set(provinceRegionData.map(p => p.tinh))];
     const validRegions = [...new Set(provinceRegionData.map(p => p.khu_vuc))];
@@ -448,15 +490,18 @@ async function processImportData(data) {
             }
         }
 
-        if (typeof ngay === 'number') {
-            const dateObj = new Date(Math.round((ngay - 25569) * 86400 * 1000));
-            ngay = dateObj.toISOString().split('T')[0];
-        } else if (!ngay) {
+        // Parse main date field with helper (handles dd/mm/yyyy, Excel serials, multiple values)
+        const parsedNgay = parseExcelDate(normalizedRow.ngay);
+        if (parsedNgay) {
+            ngay = parsedNgay;
+        } else {
             ngay = new Date().toISOString().split('T')[0];
-        } else if (typeof ngay === 'string') {
-             const d = new Date(ngay);
-             if(!isNaN(d.getTime())) ngay = d.toISOString().split('T')[0];
         }
+
+        // Normalize other date fields (ngay_ky, ngay_ket_thuc) using parser
+        ['ngay_ky', 'ngay_ket_thuc'].forEach(field => {
+            normalizedRow[field] = parseExcelDate(normalizedRow[field]);
+        });
 
         const groupKey = `${benh_vien.trim().toLowerCase()}_${ngay}`;
 
@@ -603,14 +648,57 @@ async function processImportData(data) {
             }
         }
 
-        // Insert
-        await sb.from('listing').insert(listingInserts);
-        if (detailInserts.length > 0) {
-            const chunkSize = 1000;
-            for (let i = 0; i < detailInserts.length; i += chunkSize) {
-                const chunk = detailInserts.slice(i, i + chunkSize);
-                await sb.from('detail').insert(chunk);
+        // Pre-insert checks and logging
+        console.log('Preparing to insert listings:', listingInserts.length, 'details:', detailInserts.length);
+        // Ensure all listing inserts have ma_thau
+        const missingMaThau = listingInserts.filter(i => !i.ma_thau || String(i.ma_thau).trim() === '');
+        if (missingMaThau.length > 0) {
+            showLoading(false);
+            const linesInfo = missingMaThau.map((it, idx) => `Item ${idx + 1}: ${JSON.stringify(it).substring(0,120)}`).join('\n');
+            showValidationErrorsModal([{
+                type: 'missing_ma_thau',
+                field: 'ma_thau',
+                message: `Phát hiện ${missingMaThau.length} hồ sơ thiếu 'ma_thau'. Vui lòng kiểm tra công thức tạo mã thầu hoặc dữ liệu.`,
+                lines: [],
+                detail: linesInfo
+            }]);
+            return;
+        }
+
+        // Ensure detail inserts have id
+        detailInserts = detailInserts.map(d => {
+            if (!d.id) d.id = Math.floor(Math.random() * 2000000000);
+            return d;
+        });
+
+        // Insert listings first
+        try {
+            const resListing = await sb.from('listing').insert(listingInserts);
+            if (resListing.error) {
+                console.error('Supabase listing insert error:', resListing);
+                showLoading(false);
+                showToast('Lỗi khi insert listing: ' + (resListing.error.message || JSON.stringify(resListing.error)), 'error');
+                return;
             }
+            // Insert details in chunks
+            if (detailInserts.length > 0) {
+                const chunkSize = 1000;
+                for (let i = 0; i < detailInserts.length; i += chunkSize) {
+                    const chunk = detailInserts.slice(i, i + chunkSize);
+                    const resDetail = await sb.from('detail').insert(chunk);
+                    if (resDetail.error) {
+                        console.error('Supabase detail insert error on chunk', i / chunkSize, resDetail);
+                        showLoading(false);
+                        showToast('Lỗi khi insert detail: ' + (resDetail.error.message || JSON.stringify(resDetail.error)), 'error');
+                        return;
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Insert exception:', err);
+            showLoading(false);
+            showToast('Lỗi khi insert dữ liệu: ' + err.message, 'error');
+            return;
         }
 
         // Notify & Log
