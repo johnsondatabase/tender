@@ -28,6 +28,7 @@ let distributorDisplayMode = 'number';
 
 let expandedHierarchyNodes = new Set();
 let expandedDistributorNodes = new Set(); 
+let revealedNodes = new Set(); // Lưu trữ các path được người dùng chủ động cho hiện số liệu
 
 const t = (key) => {
     const lang = getCurrentLanguage();
@@ -76,18 +77,40 @@ window.toggleDistributorNode = function(path) {
 function toggleNode(path, set, containerId) {
     if (set.has(path)) {
         set.delete(path);
+        revealedNodes.delete(path); // Khi đóng nhánh thì reset luôn trạng thái "con mắt"
     } else {
         set.add(path);
     }
-    const row = document.querySelector(`#${containerId} .tree-row[data-path="${CSS.escape(path)}"]`);
+    
+    // Thay vì dùng classList.toggle, ta render lại để cập nhật Icon con mắt chính xác
+    // (Hoặc có thể tối ưu bằng cách tìm element và thay thế nội dung, nhưng render lại cây là cách an toàn nhất cho cấu trúc này)
+    applyDashboardDateFilter(); 
+}
+
+window.toggleRevealNode = function(path, event) {
+    if (event) event.stopPropagation(); // Ngăn việc đóng/mở nhánh khi click vào con mắt
+    
+    if (revealedNodes.has(path)) {
+        revealedNodes.delete(path);
+    } else {
+        revealedNodes.add(path);
+    }
+    
+    const row = document.querySelector(`.tree-row[data-path="${CSS.escape(path)}"]`);
     if (row) {
-        row.classList.toggle('expanded');
-        const next = row.nextElementSibling;
-        if (next && next.classList.contains('tree-children')) {
-            next.classList.toggle('hidden');
+        row.classList.toggle('revealed');
+        // Cập nhật icon con mắt mà không cần render lại cả cây
+        const eyeBtn = row.querySelector('.eye-toggle-btn');
+        if (eyeBtn) {
+            const isRevealed = revealedNodes.has(path);
+            eyeBtn.innerHTML = isRevealed ? `
+                <svg class="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+            ` : `
+                <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"></path></svg>
+            `;
         }
     }
-}
+};
 
 export async function onShowDashboardView() {
     const container = document.getElementById('view-phat-trien');
@@ -409,6 +432,12 @@ export async function onShowDashboardView() {
             .dark .tree-row:hover { background-color: #374151; }
             .tree-row.expanded > div > div:first-child > svg { transform: rotate(90deg); }
             
+            /* Logic: Ẩn số liệu của hàng cha khi nó có class .expanded và không có class .revealed */
+            .tree-row.expanded:not(.revealed) .stats-cell {
+                opacity: 0;
+                pointer-events: none;
+            }
+
             /* Custom Scrollbar for Accordion */
             #hierarchy-tree::-webkit-scrollbar, #distributor-tree::-webkit-scrollbar { width: 4px; }
             #hierarchy-tree::-webkit-scrollbar-thumb, #distributor-tree::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
@@ -595,8 +624,6 @@ function getDateRangeByType(type) {
     return { start, end };
 }
 
-// ... (setupContractMonitorListeners, setupHierarchyToggleListeners unchanged) ...
-
 function setupContractMonitorListeners() {
     const btns = document.querySelectorAll('.exp-filter-btn');
     btns.forEach(btn => {
@@ -696,8 +723,6 @@ async function loadDashboardData() {
         showLoading(false);
     }
 }
-
-// ... (calculateGlobalStats, updateTree, renderGlobalCharts, renderHierarchy, renderDistributorAnalysis, generateTreeHTML, renderExpiringContracts UNCHANGED) ...
 
 function calculateGlobalStats(listings, details) {
     let totalQuota = 0, totalWin = 0;
@@ -1074,6 +1099,7 @@ function generateTreeHTML(node, expandedSet, containerId, level = 0, parentPath 
         const total = stats.Listing + stats.Waiting + stats.Win + stats.Fail;
         const currentPath = parentPath ? `${parentPath}|${key}` : key;
         const isExpanded = expandedSet.has(currentPath);
+        const isRevealed = revealedNodes.has(currentPath);
         
         if (total === 0) return;
 
@@ -1117,6 +1143,7 @@ function generateTreeHTML(node, expandedSet, containerId, level = 0, parentPath 
         };
 
         const expandedClass = isExpanded ? 'expanded' : '';
+        const revealedClass = isRevealed ? 'revealed' : '';
         const childrenHiddenClass = isExpanded ? '' : 'hidden';
         const toggleFunc = containerId === 'distributor-tree' ? 'window.toggleDistributorNode' : 'window.toggleHierarchyNode';
 
@@ -1141,19 +1168,31 @@ function generateTreeHTML(node, expandedSet, containerId, level = 0, parentPath 
             }
         }
 
+        // Logic "con mắt"
+        let eyeButton = '';
+        if (hasChildren && isExpanded) {
+            const eyeIcon = isRevealed ? `
+                <svg class="w-3.5 h-3.5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+            ` : `
+                <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l18 18"></path></svg>
+            `;
+            eyeButton = `<button onclick="window.toggleRevealNode('${currentPath}', event)" class="eye-toggle-btn p-1 hover:bg-gray-200 dark:hover:bg-gray-600 rounded ml-1 transition-colors flex items-center justify-center" title="Bật/Tắt hiển thị số liệu">${eyeIcon}</button>`;
+        }
+
         html += `
-            <div class="tree-row group ${borderClass} cursor-pointer transition-colors ${expandedClass} ${stickyClass}" data-path="${currentPath}" onclick="${toggleFunc}('${currentPath}')">
+            <div class="tree-row group ${borderClass} cursor-pointer transition-colors ${expandedClass} ${revealedClass} ${stickyClass}" data-path="${currentPath}" onclick="${toggleFunc}('${currentPath}')">
                 <div class="flex items-center py-2 pr-2 hover:bg-gray-100 dark:hover:bg-gray-700/50 ${bgClass} ${fontClass}">
                     <div class="flex-1 flex items-center gap-2 overflow-hidden" style="padding-left: ${paddingLeft}px">
                         ${toggleIcon}
                         <span class="${labelClass}" title="${key}" ${labelOnClick}>${key}</span>
+                        ${eyeButton}
                         ${actionButtons}
                     </div>
-                    <div class="w-16 text-center text-gray-500 border-l border-gray-200 dark:border-gray-600">${fmt(stats.Listing, 'Listing')}</div>
-                    <div class="w-16 text-center text-blue-500 border-l border-gray-200 dark:border-gray-600">${fmt(stats.Waiting, 'Waiting')}</div>
-                    <div class="w-16 text-center text-green-500 font-bold border-l border-gray-200 dark:border-gray-600">${fmt(stats.Win, 'Win')}</div>
-                    <div class="w-16 text-center text-red-500 border-l border-gray-200 dark:border-gray-600">${fmt(stats.Fail, 'Fail')}</div>
-                    <div class="w-20 relative text-center border-l border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30 overflow-hidden h-full flex items-center justify-center">
+                    <div class="stats-cell w-16 text-center text-gray-500 border-l border-gray-200 dark:border-gray-600 transition-opacity duration-200">${fmt(stats.Listing, 'Listing')}</div>
+                    <div class="stats-cell w-16 text-center text-blue-500 border-l border-gray-200 dark:border-gray-600 transition-opacity duration-200">${fmt(stats.Waiting, 'Waiting')}</div>
+                    <div class="stats-cell w-16 text-center text-green-500 font-bold border-l border-gray-200 dark:border-gray-600 transition-opacity duration-200">${fmt(stats.Win, 'Win')}</div>
+                    <div class="stats-cell w-16 text-center text-red-500 border-l border-gray-200 dark:border-gray-600 transition-opacity duration-200">${fmt(stats.Fail, 'Fail')}</div>
+                    <div class="stats-cell w-20 relative text-center border-l border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700/30 overflow-hidden h-full flex items-center justify-center transition-opacity duration-200">
                         <div class="absolute inset-y-0 left-0 bg-blue-200 dark:bg-blue-900/40 z-0 transition-all duration-500" style="width: ${barWidth}%"></div>
                         <span class="relative z-10 font-bold text-gray-700 dark:text-gray-300 text-[10px]">${fmt(total, 'Total')}</span>
                     </div>
