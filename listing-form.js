@@ -451,6 +451,11 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
                         </div>
                      </div>
                      <div id="file-list-container" class="space-y-2 mt-4"></div>
+                    
+                    <div class="mt-4">
+                        <label class="block font-medium text-gray-700 dark:text-gray-300 mb-1">Note</label>
+                        <textarea id="l-note" rows="4" class="w-full px-2 py-2 border rounded focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" placeholder="Ghi chú thêm..."></textarea>
+                    </div>
                  </div>
                  
                  <div class="w-full md:w-1/3 bg-gray-50 dark:bg-gray-900/50 p-4 md:p-6 flex flex-col h-auto md:h-full border-t md:border-t-0 flex-shrink-0">
@@ -539,6 +544,8 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
         document.getElementById('l-psr').value = item.psr || '';
         document.getElementById('l-quan-ly').value = item.quan_ly || '';
         document.getElementById('l-status').value = item.tinh_trang || 'Listing';
+        const noteEl = document.getElementById('l-note');
+        if (noteEl) noteEl.value = item.note || '';
         
         // Trigger Department Load if Hospital is set
         if (item.benh_vien) handleHospitalChange(item.benh_vien);
@@ -640,7 +647,8 @@ export async function saveListing(e) {
         psr: document.getElementById('l-psr').value,
         quan_ly: document.getElementById('l-quan-ly').value,
         tinh_trang: document.getElementById('l-status').value,
-        files: currentFiles
+        files: currentFiles,
+        note: (document.getElementById('l-note') && document.getElementById('l-note').value) || null
     };
 
     // --- Validation: Materials ---

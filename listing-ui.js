@@ -10,6 +10,17 @@ const t = (key) => {
     return translations[lang][key] || key;
 };
 
+// Escape HTML to safely render user-provided text, preserving newlines separately
+function escapeHtml(str) {
+    if (!str && str !== 0) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 export const COLUMNS = {
     'Listing': { 
         labelKey: 'col_listing', 
@@ -130,7 +141,8 @@ function createCard(item) {
     const wonPercent = item.stats.quota > 0 ? Math.round((item.stats.won / item.stats.quota) * 100) : 0;
 
     let progressHtml = '';
-    if (progress) {
+    // Hide contract duration (progress bar + labels) when item is in 'Fail' status
+    if (progress && item.tinh_trang !== 'Fail') {
         progressHtml = `
             <div class="mt-2 pt-2 border-t border-gray-100 dark:border-gray-600">
                 <div class="flex justify-between text-[10px] text-gray-400 mb-0.5 font-mono">
@@ -146,6 +158,14 @@ function createCard(item) {
                 </div>
             </div>
         `;
+    }
+    
+    // Note HTML (preserve newlines as <br>) - hidden by default
+    let noteHtml = '';
+    if (item.note) {
+        const safe = escapeHtml(item.note).replace(/\n/g, '<br>');
+        // Use smaller font to match other card elements
+        noteHtml = `<div class="card-note mt-2 text-xs leading-snug text-gray-700 dark:text-gray-300 hidden" data-note-id="${itemId}">${safe}</div>`;
     }
 
     el.className = `bg-white dark:bg-gray-700 p-3 rounded-lg shadow-sm border-l-4 ${statusColor} cursor-grab hover:shadow-md hover:-translate-y-0.5 transition-all relative group select-none flex flex-col gap-1.5`;
@@ -164,6 +184,9 @@ function createCard(item) {
              <div class="text-right flex-shrink-0 flex items-center gap-1">
                 <button class="btn-copy-code p-1 text-gray-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors rounded hover:bg-gray-100 dark:hover:bg-gray-600" title="Sao chép">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                </button>
+                <button class="btn-toggle-note p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors rounded" title="Ghi chú">
+                    <svg class="w-3.5 h-3.5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </button>
                 <div class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-600 font-mono font-bold text-gray-700 dark:text-gray-200 border dark:border-gray-500">${item.ma_thau || 'N/A'}</div>
              </div>
@@ -210,6 +233,7 @@ function createCard(item) {
             </div>
         </div>
         ${progressHtml}
+        ${noteHtml}
         <div class="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 dark:bg-gray-800/90 rounded shadow-sm backdrop-blur-sm p-0.5 z-10 border dark:border-gray-600">
             <button class="btn-action-view p-1 rounded hover:bg-indigo-100 text-indigo-600 dark:hover:bg-indigo-900 dark:text-indigo-400 transition-colors" title="${t('perm_view')}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 0 1 6 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg></button> 
             
@@ -241,6 +265,21 @@ function createCard(item) {
     }
     el.querySelector('.btn-action-history').onclick = (e) => { e.stopPropagation(); viewListingHistory(item.ma_thau); };
     
+    // Toggle Note visibility
+    const btnToggleNote = el.querySelector('.btn-toggle-note');
+    const noteDiv = el.querySelector('.card-note');
+    if (btnToggleNote && noteDiv) {
+        btnToggleNote.onclick = (e) => {
+            e.stopPropagation();
+            noteDiv.classList.toggle('hidden');
+            const svg = btnToggleNote.querySelector('svg');
+            if (svg) svg.classList.toggle('rotate-180');
+        };
+    } else if (btnToggleNote) {
+        // If no note content, hide the toggle button
+        btnToggleNote.style.display = 'none';
+    }
+
     // Copy Logic
     const btnCopy = el.querySelector('.btn-copy-code');
     if (btnCopy) {

@@ -1,6 +1,4 @@
 
-
-
 import { sb, cache, currentUser, setCurrentUser, showLoading, showToast, showConfirm, DEFAULT_AVATAR_URL, updateSidebarAvatar, sanitizeFileName, onlineUsers, handleLogout } from './app.js';
 import { translations, setLanguage, getCurrentLanguage } from './lang.js';
 
@@ -13,8 +11,9 @@ const t = (key) => {
 let selectedAvatarFile = null;
 let isViewLoaded = false;
 let currentEditingUserGmail = null;
-let currentViewerUserGmail = null; // Track which user we are editing viewers for
-let cachedPotentialViewers = null; // Cache distinct list
+let currentViewerUserGmail = null; 
+let cachedPotentialViewers = null; 
+let supportRealtimeChannel = null;
 
 const APP_VIEWS = [
     { id: 'view-phat-trien', labelI18n: 'header_dashboard' }, 
@@ -60,9 +59,12 @@ const VIEW_TEMPLATE = `
                     <svg class="w-5 h-5 text-gray-400 group-hover:text-orange-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
                     <span class="text-sm font-medium text-gray-700 group-hover:text-primary transition-colors" data-i18n="settings_about">Giới Thiệu</span>
                 </button>
-                <button id="btn-settings-support" class="settings-row w-full hover:bg-gray-50 border-b-0 text-left px-4 py-3 flex items-center justify-start gap-3 group">
-                    <svg class="w-5 h-5 text-gray-400 group-hover:text-teal-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                    <span class="text-sm font-medium text-gray-700 group-hover:text-primary transition-colors" data-i18n="settings_support">Hỗ Trợ</span>
+                <button id="btn-settings-support" class="settings-row w-full hover:bg-gray-50 border-b-0 text-left px-4 py-3 flex items-center justify-between group">
+                    <div class="flex items-center gap-3">
+                        <svg class="w-5 h-5 text-gray-400 group-hover:text-teal-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+                        <span class="text-sm font-medium text-gray-700 group-hover:text-primary transition-colors" data-i18n="settings_support">Hỗ Trợ</span>
+                    </div>
+                    <span id="badge-support-desktop" class="hidden bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">0</span>
                 </button>
                 <!-- Desktop Logout Button (Aligned left) -->
                 <button id="logout-btn-desktop" class="settings-row w-full hover:bg-red-50 border-b-0 text-left px-4 py-3 flex items-center justify-start gap-3 group text-red-600">
@@ -137,7 +139,10 @@ const VIEW_TEMPLATE = `
                          <div class="p-2 bg-teal-50 rounded-full text-teal-500"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path></svg></div>
                         <span class="text-sm font-medium text-gray-700" data-i18n="settings_support">Hỗ Trợ</span>
                     </div>
-                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                    <div class="flex items-center gap-2">
+                        <span id="badge-support-mobile" class="hidden bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">0</span>
+                        <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                    </div>
                 </button>
             </div>
 
@@ -342,12 +347,19 @@ const VIEW_TEMPLATE = `
             </div>
     </div>
     
-    <!-- SUPPORT TEMPLATE -->
-    <div id="tpl-support" class="p-4 md:p-8">
-            <div class="flex flex-col items-center justify-center h-full py-20 text-center">
-            <svg class="w-20 h-20 text-gray-200 dark:text-gray-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-            <h3 class="text-xl text-gray-800 dark:text-white font-medium" data-i18n="settings_support">Trung tâm hỗ trợ</h3>
-            <p class="text-gray-500 dark:text-gray-400 text-sm mt-2 max-w-xs">Tính năng chat với hỗ trợ viên và gửi ticket đang được xây dựng.</p>
+    <!-- SUPPORT TEMPLATE (UPDATED) -->
+    <div id="tpl-support" class="p-4 md:p-8 h-full flex flex-col">
+        <div class="border-b pb-2 mb-4 hidden md:block">
+            <h2 class="text-xl font-medium text-gray-800 dark:text-white" data-i18n="settings_support">Trung tâm Hỗ trợ</h2>
+        </div>
+        <div class="flex-1 border rounded-sm bg-gray-50 dark:bg-gray-900 dark:border-gray-700 overflow-hidden flex flex-col min-h-[300px]">
+            <div class="bg-white dark:bg-gray-800 p-3 border-b dark:border-gray-700 text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider flex justify-between items-center">
+                <span>Danh sách Ticket</span>
+            </div>
+            <div id="support-ticket-list" class="overflow-y-auto p-0 flex-1 h-full">
+                <!-- Ticket items will be injected here -->
+                <div class="p-8 text-center text-gray-500 text-sm">Đang tải dữ liệu...</div>
+            </div>
         </div>
     </div>
 </div>
@@ -469,6 +481,13 @@ export async function initCaiDatView() {
     if(cancelViewerBtn) cancelViewerBtn.onclick = closeViewerModal;
     if(saveViewerBtn) saveViewerBtn.onclick = saveViewers;
     if(viewerSearch) viewerSearch.addEventListener('input', filterViewerList);
+    
+    // Support Ticket List click delegation
+    const supportList = document.getElementById('support-ticket-list');
+    if(supportList) {
+        // This will be in the template but listeners are attached when tab is opened usually.
+        // Or delegated here if container exists (it won't exist until onShowCaiDatView runs first)
+    }
 }
 
 // Function called by app.js every time the view is shown
@@ -499,6 +518,10 @@ export async function onShowCaiDatView() {
 
     // Ensure we re-translate when showing the view again
     setLanguage(getCurrentLanguage());
+
+    // Initialize badges and realtime
+    updateSupportBadge();
+    initSupportRealtime();
 
     // On Desktop: If content slot is empty, open default tab (Profile)
     if (window.innerWidth >= 768) {
@@ -619,6 +642,7 @@ function openSettingsTab(tabName, title) {
         const nameInput = document.getElementById('profile-ho-ten');
         if(nameInput && currentUser) nameInput.value = currentUser.ho_ten || '';
     }
+    if (tabName === 'support') fetchSupportTickets();
 }
 
 function closeSettingsDetail() {
@@ -905,6 +929,165 @@ async function handleProfileUpdate(e) {
         showLoading(false);
     }
 }
+
+// --- SUPPORT SYSTEM LOGIC ---
+
+function initSupportRealtime() {
+    if(!supportRealtimeChannel) {
+        supportRealtimeChannel = sb.channel('public:phan_hoi')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'phan_hoi' }, () => {
+                updateSupportBadge();
+                // Refresh list if support tab is open
+                const isDesktop = window.innerWidth >= 768;
+                const slot = isDesktop ? document.getElementById('desktop-settings-content-slot') : document.getElementById('mobile-settings-content-slot');
+                if (slot && slot.querySelector('#support-ticket-list')) {
+                    fetchSupportTickets(true); // Silent update
+                }
+            })
+            .subscribe();
+    }
+}
+
+async function updateSupportBadge() {
+    if (!currentUser) return;
+    try {
+        const { count, error } = await sb.from('phan_hoi')
+            .select('id', { count: 'exact', head: true })
+            .or('trang_thai.is.null,trang_thai.eq.Mới'); // Count null OR 'Mới'
+
+        if (!error) {
+            const countVal = count || 0;
+            const desktopBadge = document.getElementById('badge-support-desktop');
+            const mobileBadge = document.getElementById('badge-support-mobile');
+            
+            [desktopBadge, mobileBadge].forEach(b => {
+                if (b) {
+                    b.textContent = countVal > 99 ? '99+' : countVal;
+                    b.classList.toggle('hidden', countVal === 0);
+                }
+            });
+        }
+    } catch(e) { console.warn("Support badge error", e); }
+}
+
+async function fetchSupportTickets(silent = false) {
+    if (!silent) showLoading(true);
+    try {
+        // Change: Use order by ngay_tao desc (was created_at)
+        const { data, error } = await sb
+            .from('phan_hoi')
+            .select('*')
+            .order('ngay_tao', { ascending: false });
+
+        if (error) throw error;
+        renderSupportTickets(data || []);
+    } catch(e) {
+        showToast("Lỗi tải ticket: " + e.message, 'error');
+    } finally {
+        if (!silent) showLoading(false);
+    }
+}
+
+function renderSupportTickets(data) {
+    const isDesktop = window.innerWidth >= 768;
+    const activeContainer = isDesktop 
+            ? document.getElementById('desktop-settings-content-slot') 
+            : document.getElementById('mobile-settings-content-slot');
+            
+    if (!activeContainer) return;
+    const container = activeContainer.querySelector('#support-ticket-list');
+    if (!container) return;
+
+    if (data.length === 0) {
+        container.innerHTML = `<div class="p-8 text-center text-gray-500 text-sm">Chưa có ticket hỗ trợ nào.</div>`;
+        return;
+    }
+
+    container.innerHTML = data.map(item => {
+        const status = item.trang_thai || 'Mới';
+        let statusColor = 'bg-blue-100 text-blue-700 border-blue-200';
+        if (status === 'Đang xử lý') statusColor = 'bg-yellow-100 text-yellow-700 border-yellow-200';
+        if (status === 'Đã xử lý') statusColor = 'bg-green-100 text-green-700 border-green-200';
+
+        // FIX: Use item.ngay_tao instead of created_at
+        const rawDate = item.ngay_tao || new Date().toISOString();
+        const time = new Date(rawDate).toLocaleDateString('vi-VN') + ' ' + new Date(rawDate).toLocaleTimeString('vi-VN', {hour:'2-digit', minute:'2-digit'});
+
+        // Only show status button for admin users
+        const isAdmin = currentUser && currentUser.phan_quyen === 'Admin';
+        const statusButtonHtml = isAdmin ? `
+            <button data-ticket-id="${item.id}" class="status-btn px-2 py-1 rounded text-xs font-medium border ${statusColor} hover:shadow-md transition-all whitespace-nowrap"
+                    onclick="window.cycleTicketStatus(${item.id}, '${status}')">
+                ${status}
+            </button>` : `
+            <span class="px-2 py-1 rounded text-xs font-medium border ${statusColor} inline-block whitespace-nowrap">
+                ${status}
+            </span>`;
+
+        return `
+            <div class="p-4 border-b dark:border-gray-700 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group">
+                <div class="flex justify-between items-start mb-1">
+                    <div>
+                        <span class="font-bold text-gray-800 dark:text-white text-sm">${item.user_name || item.user_gmail}</span>
+                        <span class="text-xs text-gray-400 ml-2">${time}</span>
+                    </div>
+                    ${statusButtonHtml}
+                </div>
+                <div class="text-sm text-gray-600 dark:text-gray-300 mt-2">
+                    <p class="font-medium text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">Nội dung:</p>
+                    <p>${item.ly_do || item.cau_hoi || 'Không có nội dung'}</p>
+                </div>
+                ${item.cau_tra_loi ? `
+                <div class="mt-2 pl-3 border-l-2 border-gray-200 dark:border-gray-600">
+                    <p class="text-xs text-gray-400">Bot trả lời:</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 italic line-clamp-2">${item.cau_tra_loi}</p>
+                </div>` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+// Global function exposed for onclick
+window.cycleTicketStatus = async (id, currentStatus) => {
+    // Check if user is admin - only admin can change ticket status
+    if (!currentUser || currentUser.phan_quyen !== 'Admin') {
+        showToast("Bạn không có quyền thay đổi trạng thái ticket. Chỉ Admin mới có thể thực hiện.", 'error');
+        return;
+    }
+
+    const statusMap = {
+        'Mới': 'Đang xử lý',
+        'Đang xử lý': 'Đã xử lý',
+        'Đã xử lý': 'Mới'
+    };
+    // Ensure robust fallback if currentStatus is somehow weird
+    const normalizedCurrent = currentStatus || 'Mới';
+    const nextStatus = statusMap[normalizedCurrent] || 'Mới';
+    
+    // Optimistic Update UI Feedback
+    const btn = document.querySelector(`button[data-ticket-id="${id}"]`);
+    let originalText = '';
+    if(btn) {
+        originalText = btn.textContent;
+        btn.textContent = '...';
+        btn.disabled = true;
+    }
+
+    try {
+        const { error } = await sb.from('phan_hoi').update({ trang_thai: nextStatus }).eq('id', id);
+        if (error) throw error;
+        // Refresh handled by Realtime, but force fetch to be sure and snappy
+        fetchSupportTickets(true); 
+    } catch(e) {
+        showToast("Lỗi cập nhật trạng thái: " + e.message, 'error');
+        // Revert UI on error
+        if(btn) {
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+        fetchSupportTickets(true); 
+    }
+};
 
 export async function fetchUsers() {
     const { data, error } = await sb.from('user').select('*').order('ho_ten');
