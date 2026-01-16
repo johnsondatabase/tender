@@ -763,7 +763,7 @@ async function loadDashboardData() {
         if (countErr) throw countErr;
 
         let details = [];
-        const batchSize = 1000;
+        const batchSize = 10000;
         if (detailCount && detailCount > 0) {
             for (let from = 0; from < detailCount; from += batchSize) {
                 const to = Math.min(from + batchSize - 1, detailCount - 1);
