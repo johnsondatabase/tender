@@ -10,6 +10,7 @@ let isReadOnlyMode = false;
 let initialFormState = null;
 let provinceData = []; // Store province/area mapping
 let productCodes = []; // Store available product codes
+let materialsAutoFillWin = false; // when true, sl_trung auto = quota; when false, sl_trung = 0
 
 // Danh sách NPP giới hạn
 const PREDEFINED_NPP = ["Harphaco Hà Nội", "Harpharco Hồ Chí Minh", "Sakae", "Long Giang"];
@@ -87,7 +88,10 @@ function renderMaterialList(readOnly) {
                 <input type="number" class="w-full px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white no-spinner appearance-none m-0 text-center" value="${item.quota || ''}" placeholder="0" onchange="window.updateMaterial(${index}, 'quota', this.value)" ${readOnly ? 'disabled' : ''}>
             </td>
             <td class="px-1 py-2">
-                <input type="number" class="w-full px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white no-spinner appearance-none m-0 text-center" value="${item.sl_trung || ''}" placeholder="0" onchange="window.updateMaterial(${index}, 'sl_trung', this.value)" ${readOnly ? 'disabled' : ''}>
+                <!-- sl_trung remains editable by user even when AutoFill is ON -->
+                <input type="number" min="0" class="w-full px-2 py-1 border rounded text-xs focus:ring-1 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white no-spinner appearance-none m-0 text-center"
+                    value="${(item.sl_trung !== null && typeof item.sl_trung !== 'undefined' && String(item.sl_trung) !== '') ? item.sl_trung : (materialsAutoFillWin ? (item.quota || '0') : '0')}"
+                    placeholder="0" onchange="window.updateMaterial(${index}, 'sl_trung', this.value)" ${readOnly ? 'disabled' : ''}>
             </td>
             <td class="px-1 py-2 text-right">
                 ${!readOnly ? `<button type="button" onclick="window.removeMaterial(${index})" class="text-red-500 hover:text-red-700 p-1"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>` : ''}
@@ -109,16 +113,38 @@ function renderMaterialList(readOnly) {
     // Update Total Header (Now at top)
     if (totalFooter) {
         totalFooter.innerHTML = `
-            <div class="flex-1 text-left pl-2 text-gray-600 dark:text-gray-300 text-xs flex items-center">
+            <div class="flex-1 text-left pl-2 text-gray-600 dark:text-gray-300 text-xs flex items-center gap-2">
                 <span class="font-bold mr-1">SL:</span> ${currentMaterials.length}
             </div>
-            <div class="flex items-center">
+            <div class="flex items-center gap-3">
+                <div class="flex items-center text-xs text-gray-600 dark:text-gray-300">
+                    <label class="text-xs mr-2">AutoFill</label>
+                    <button id="toggle-auto-fill" class="px-2 py-0.5 rounded text-xs border ${materialsAutoFillWin ? 'bg-green-100 border-green-300 text-green-800' : 'bg-white border-gray-200 text-gray-600'}">
+                        ${materialsAutoFillWin ? 'Bật' : 'Tắt'}
+                    </button>
+                </div>
                 <div class="text-right px-2 text-gray-600 dark:text-gray-300 font-bold text-xs mr-2">Tổng:</div>
                 <div class="w-20 text-center px-1 font-bold text-blue-600 dark:text-blue-400 border-l dark:border-gray-600 bg-white dark:bg-gray-800 rounded-sm">${totalQuota.toLocaleString('vi-VN')}</div>
                 <div class="w-20 text-center px-1 font-bold text-green-600 dark:text-green-400 border-l dark:border-gray-600 bg-white dark:bg-gray-800 rounded-sm">${totalWon.toLocaleString('vi-VN')}</div>
                 <div class="w-8"></div>
             </div>
         `;
+        // Attach toggle handler
+        const toggleBtn = document.getElementById('toggle-auto-fill');
+        if (toggleBtn) {
+            toggleBtn.onclick = () => {
+                materialsAutoFillWin = !materialsAutoFillWin;
+                // Apply behavior to currentMaterials
+                currentMaterials = currentMaterials.map(m => {
+                    const q = (m.quota === '' || m.quota === null || typeof m.quota === 'undefined') ? 0 : Number(m.quota);
+                    return {
+                        ...m,
+                        sl_trung: materialsAutoFillWin ? q : 0
+                    };
+                });
+                renderMaterialList(readOnly);
+            };
+        }
     }
 }
 
@@ -135,10 +161,16 @@ window.updateMaterial = function(index, field, value) {
         }
         currentMaterials[index][field] = value;
         if (field === 'quota') {
-             currentMaterials[index]['sl_trung'] = value;
-             renderMaterialList(isReadOnlyMode);
+            // Accept zero; convert empty string to '' but store as value
+            currentMaterials[index]['quota'] = value;
+            // Auto-fill behavior: if enabled, set sl_trung = quota; otherwise set to 0
+            const num = (value === '' || value === null || typeof value === 'undefined') ? 0 : Number(value);
+            currentMaterials[index]['sl_trung'] = materialsAutoFillWin ? num : 0;
+            renderMaterialList(isReadOnlyMode);
         } else if (field === 'sl_trung') {
-             renderMaterialList(isReadOnlyMode);
+            // sl_trung is controlled by auto-fill toggle; ignore manual edits to keep consistent
+            currentMaterials[index]['sl_trung'] = value;
+            renderMaterialList(isReadOnlyMode);
         }
     }
 };
@@ -568,8 +600,8 @@ export async function openListingModal(item = null, readOnly = false, isPreFill 
         } else if (isPreFill && item.details) {
             currentMaterials = item.details.map(d => ({
                 ma_vt: d.ma_vt || '',
-                quota: d.quota || 0,
-                sl_trung: d.sl_trung || d.quota || 0 
+                quota: (d.quota ?? 0),
+                sl_trung: (d.sl_trung ?? d.quota ?? 0)
             }));
         }
 
@@ -657,10 +689,10 @@ export async function saveListing(e) {
         return;
     }
 
-    // Check for empty Ma VT or empty/zero Quota
+    // Check for empty Ma VT or invalid negative Quota
     const invalidMaterial = currentMaterials.find(m => 
         !m.ma_vt || m.ma_vt.trim() === '' || 
-        !m.quota || parseFloat(m.quota) <= 0
+        m.quota === '' || m.quota === null || typeof m.quota === 'undefined' || isNaN(Number(m.quota)) || Number(m.quota) < 0
     );
 
     if (invalidMaterial) {
@@ -799,8 +831,8 @@ export async function saveListing(e) {
                 psr: formData.psr,
                 quan_ly: formData.quan_ly,
                 ma_vt: m.ma_vt,
-                quota: m.quota || null,
-                sl_trung: m.sl_trung || null
+                quota: (m.quota === '' || m.quota === null || typeof m.quota === 'undefined') ? null : Number(m.quota),
+                sl_trung: (m.sl_trung === '' || m.sl_trung === null || typeof m.sl_trung === 'undefined') ? null : Number(m.sl_trung)
             }));
 
             const { error: insertError } = await sb.from('detail').insert(detailRows);

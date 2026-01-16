@@ -520,7 +520,8 @@ function setupDashboardDateFilterListeners() {
 function applyDashboardDateFilter() {
     // Filter details by the dashboard date range using the detail's `ngay` column.
     // This ensures Dashboard KPIs (Quota / Win) match the Detail view which is affected by the Date column.
-    const filteredDetails = rawDetails.filter(d => isDateInDashboardRange(d.ngay));
+    // Use normalized date field if available
+    const filteredDetails = rawDetails.filter(d => isDateInDashboardRange(d.__ngay_iso || d.ngay));
 
     // Derive the set of related listings from filtered details (by ma_thau)
     const validMaThaus = new Set(filteredDetails.map(d => d.ma_thau));
@@ -535,7 +536,39 @@ function applyDashboardDateFilter() {
 
 function isDateInDashboardRange(dateString) {
     if (!dateString) return false;
-    const d = new Date(dateString);
+    // Normalize various date formats (e.g. "12/5/2025", "12/05/2025", "2025-05-12")
+    const normalizeDateString = (s) => {
+        if (!s) return null;
+        const str = String(s).trim();
+        // YYYY-MM-DD
+        const isoMatch = /^\d{4}-\d{1,2}-\d{1,2}$/.exec(str);
+        if (isoMatch) {
+            const parts = str.split('-').map(p => p.padStart(2, '0'));
+            return `${parts[0]}-${parts[1].padStart(2,'0')}-${parts[2].padStart(2,'0')}`;
+        }
+        // DD/MM/YYYY or D/M/YYYY
+        const dmMatch = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(str);
+        if (dmMatch) {
+            const day = dmMatch[1].padStart(2,'0');
+            const month = dmMatch[2].padStart(2,'0');
+            const year = dmMatch[3];
+            return `${year}-${month}-${day}`;
+        }
+        // Fallback to Date parsing
+        const parsed = new Date(str);
+        if (!isNaN(parsed.getTime())) {
+            const y = parsed.getFullYear();
+            const m = String(parsed.getMonth() + 1).padStart(2, '0');
+            const d = String(parsed.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+        return null;
+    };
+
+    const normalized = normalizeDateString(dateString);
+    if (!normalized) return false;
+    const dParts = normalized.split('-').map(n => parseInt(n, 10));
+    const d = new Date(dParts[0], dParts[1] - 1, dParts[2]);
     d.setHours(0,0,0,0);
     const now = new Date();
     now.setHours(0,0,0,0);
@@ -701,13 +734,51 @@ function setupHierarchyToggleListeners() {
 async function loadDashboardData() {
     showLoading(true);
     try {
+        // Fetch listings (no pagination expected here)
         const { data: listings, error: lErr } = await sb.from('listing').select('*');
         if (lErr) throw lErr;
-        rawListings = listings;
 
-        const { data: details, error: dErr } = await sb.from('detail').select('*');
-        if (dErr) throw dErr;
-        rawDetails = details || [];
+        // Helper: normalize several date formats into YYYY-MM-DD (or null)
+        const normalizeDateStringSimple = (s) => {
+            if (!s) return null;
+            const str = String(s).trim();
+            const dm = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(str);
+            if (dm) return `${dm[3]}-${dm[2].padStart(2,'0')}-${dm[1].padStart(2,'0')}`;
+            if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(str)) return str;
+            const parsed = new Date(str);
+            if (!isNaN(parsed.getTime())) {
+                const y = parsed.getFullYear();
+                const m = String(parsed.getMonth() + 1).padStart(2, '0');
+                const d = String(parsed.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+            return null;
+        };
+
+        rawListings = listings.map(l => ({ ...l, __ngay_iso: normalizeDateStringSimple(l.ngay), __ngay_kt_iso: normalizeDateStringSimple(l.ngay_ket_thuc) }));
+
+        // Fetch details with pagination if needed (some Supabase/PostgREST setups limit rows per request)
+        // First ask for exact count (head:true returns count)
+        const { count: detailCount, error: countErr } = await sb.from('detail').select('ma_vt', { count: 'exact', head: true });
+        if (countErr) throw countErr;
+
+        let details = [];
+        const batchSize = 1000;
+        if (detailCount && detailCount > 0) {
+            for (let from = 0; from < detailCount; from += batchSize) {
+                const to = Math.min(from + batchSize - 1, detailCount - 1);
+                const { data, error } = await sb.from('detail').select('*').range(from, to);
+                if (error) throw error;
+                if (data && data.length) details = details.concat(data);
+            }
+        } else {
+            // Fallback: try to fetch without pagination
+            const { data, error } = await sb.from('detail').select('*');
+            if (error) throw error;
+            details = data || [];
+        }
+
+        rawDetails = (details || []).map(d => ({ ...d, __ngay_iso: normalizeDateStringSimple(d.ngay) }));
 
         const products = [...new Set(rawDetails.map(d => d.ma_vt).filter(v => v))].sort();
         setupProductSearchDropdown(products);
@@ -739,10 +810,20 @@ function calculateGlobalStats(listings, details) {
         const sKey = ['Listing', 'Waiting', 'Win', 'Fail'].includes(status) ? status : 'Listing';
         statusCounts[sKey]++;
         
-        if (l.ngay) {
-            const date = new Date(l.ngay);
-            const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            monthlyStats[key] = (monthlyStats[key] || 0) + 1;
+        // Use normalized date where possible
+        const rawDate = l.__ngay_iso || l.ngay;
+        if (rawDate) {
+            const parts = String(rawDate).split('-').map(p => parseInt(p, 10));
+            if (parts.length === 3) {
+                const key = `${parts[0]}-${String(parts[1]).padStart(2, '0')}`;
+                monthlyStats[key] = (monthlyStats[key] || 0) + 1;
+            } else {
+                const date = new Date(rawDate);
+                if (!isNaN(date.getTime())) {
+                    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                    monthlyStats[key] = (monthlyStats[key] || 0) + 1;
+                }
+            }
         }
 
         if (regionViewMode === 'count') {
