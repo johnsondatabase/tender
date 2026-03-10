@@ -952,6 +952,20 @@
                 </div>
 
                 <div class="flex items-center gap-3">
+                    <!-- PWA Install Button (Mobile Only, hidden by default) -->
+                    <button id="header-pwa-install-btn"
+                        class="hidden p-2 rounded-full hover:bg-gray-100 text-blue-500 dark:text-blue-400 relative focus:outline-none animate-pulse"
+                        title="Cài đặt ứng dụng">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z">
+                            </path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 6v6m0 0l-2-2m2 2l2-2">
+                            </path>
+                        </svg>
+                    </button>
+
                     <!-- Chatbot Button (Mobile Only) -->
                     <button id="header-chatbot-btn"
                         class="md:hidden p-2 rounded-full hover:bg-gray-100 text-primary dark:text-blue-400 relative focus:outline-none">

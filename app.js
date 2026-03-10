@@ -1004,7 +1004,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
     deferredInstallPrompt = e;
 });
 
-// 3. Show Install Banner
+// 3. Show Install Banner + Header Icon
 function showPWAInstallPrompt() {
     // Don't show on desktop
     const isMobile = /Android|iPhone|iPad|iPod|webOS|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -1013,17 +1013,47 @@ function showPWAInstallPrompt() {
     // Don't show if already installed as PWA
     if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone) return;
 
-    // Don't show if dismissed within last 7 days
-    const dismissedAt = localStorage.getItem('pwa_install_dismissed');
-    if (dismissedAt) {
-        const daysSince = (Date.now() - parseInt(dismissedAt)) / (1000 * 60 * 60 * 24);
-        if (daysSince < 7) return;
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const headerInstallBtn = document.getElementById('header-pwa-install-btn');
+
+    // Always show header icon on mobile when not installed
+    if (headerInstallBtn) {
+        headerInstallBtn.classList.remove('hidden');
+        headerInstallBtn.classList.add('md:hidden');
+
+        headerInstallBtn.addEventListener('click', async () => {
+            if (isIOS) {
+                // Show iOS instructions as a toast-like popup
+                showIOSInstallGuide();
+            } else if (deferredInstallPrompt) {
+                deferredInstallPrompt.prompt();
+                const { outcome } = await deferredInstallPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    showToast('Ứng dụng đã được cài đặt!', 'success');
+                    headerInstallBtn.classList.add('hidden');
+                }
+                deferredInstallPrompt = null;
+            } else {
+                showToast('Mở trình duyệt Chrome để cài đặt ứng dụng', 'info');
+            }
+        });
     }
+
+    // Hide header icon when app is installed
+    window.addEventListener('appinstalled', () => {
+        if (headerInstallBtn) headerInstallBtn.classList.add('hidden');
+        const banner = document.getElementById('pwa-install-banner');
+        if (banner) banner.remove();
+    });
+
+    // Show banner only if not dismissed recently
+    const dismissedAt = localStorage.getItem('pwa_install_dismissed');
+    const shouldShowBanner = !dismissedAt || ((Date.now() - parseInt(dismissedAt)) / (1000 * 60 * 60 * 24) >= 7);
+
+    if (!shouldShowBanner) return;
 
     // Delay showing the banner for 2 seconds after login for better UX
     setTimeout(() => {
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-
         // Create the banner
         const banner = document.createElement('div');
         banner.id = 'pwa-install-banner';
@@ -1042,7 +1072,6 @@ function showPWAInstallPrompt() {
         `;
 
         if (isIOS) {
-            // iOS: Show manual instructions
             banner.innerHTML = `
                 <div style="display:flex;align-items:flex-start;gap:12px;">
                     <div style="flex-shrink:0;width:44px;height:44px;background:rgba(255,255,255,0.2);border-radius:12px;display:flex;align-items:center;justify-content:center;">
@@ -1058,7 +1087,6 @@ function showPWAInstallPrompt() {
                 </div>
             `;
         } else {
-            // Android: Show install button  
             banner.innerHTML = `
                 <div style="display:flex;align-items:center;gap:12px;">
                     <div style="flex-shrink:0;width:44px;height:44px;background:rgba(255,255,255,0.2);border-radius:12px;display:flex;align-items:center;justify-content:center;">
@@ -1091,7 +1119,7 @@ function showPWAInstallPrompt() {
             document.head.appendChild(animStyle);
         }
 
-        // Dismiss button
+        // Dismiss button — only hides banner, header icon stays
         const dismissBtn = banner.querySelector('#pwa-dismiss-btn');
         if (dismissBtn) {
             dismissBtn.addEventListener('click', () => {
@@ -1110,6 +1138,7 @@ function showPWAInstallPrompt() {
                     const { outcome } = await deferredInstallPrompt.userChoice;
                     if (outcome === 'accepted') {
                         showToast('Ứng dụng đã được cài đặt!', 'success');
+                        if (headerInstallBtn) headerInstallBtn.classList.add('hidden');
                     }
                     deferredInstallPrompt = null;
                 }
@@ -1118,4 +1147,50 @@ function showPWAInstallPrompt() {
         }
 
     }, 2000);
+}
+
+// iOS Install Guide popup
+function showIOSInstallGuide() {
+    // Remove existing guide if any
+    const existing = document.getElementById('ios-install-guide');
+    if (existing) { existing.remove(); return; }
+
+    const guide = document.createElement('div');
+    guide.id = 'ios-install-guide';
+    guide.style.cssText = `
+        position: fixed;
+        bottom: 70px;
+        left: 12px;
+        right: 12px;
+        z-index: 9999;
+        background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 10px 40px rgba(37, 99, 235, 0.4);
+        animation: pwa-slide-up 0.4s ease;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    `;
+    guide.innerHTML = `
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+            <div style="flex-shrink:0;width:44px;height:44px;background:rgba(255,255,255,0.2);border-radius:12px;display:flex;align-items:center;justify-content:center;">
+                <svg width="24" height="24" fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0-12l-4 4m4-4l4 4"/></svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:700;font-size:14px;color:white;margin-bottom:4px;">Cài đặt ứng dụng</div>
+                <div style="font-size:12px;color:rgba(255,255,255,0.85);line-height:1.4;">
+                    Nhấn nút <svg style="display:inline;vertical-align:middle;margin:0 2px;" width="16" height="16" fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M12 4v12m0-12l-4 4m4-4l4 4"/></svg> <b>Chia sẻ</b> ở thanh dưới, rồi chọn <b>"Thêm vào Màn hình chính"</b>
+                </div>
+            </div>
+            <button onclick="this.closest('#ios-install-guide').remove()" style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:rgba(255,255,255,0.15);border:none;color:white;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+        </div>
+    `;
+    document.body.appendChild(guide);
+
+    // Auto-hide after 8 seconds
+    setTimeout(() => {
+        if (guide.parentElement) {
+            guide.style.animation = 'pwa-slide-up 0.3s ease reverse';
+            setTimeout(() => guide.remove(), 300);
+        }
+    }, 8000);
 }
