@@ -1022,19 +1022,16 @@ function showPWAInstallPrompt() {
         headerInstallBtn.classList.add('md:hidden');
 
         headerInstallBtn.addEventListener('click', async () => {
+            // Remove existing banner/guide if any
+            const existingBanner = document.getElementById('pwa-install-banner');
+            if (existingBanner) { existingBanner.remove(); return; }
+            const existingGuide = document.getElementById('ios-install-guide');
+            if (existingGuide) { existingGuide.remove(); return; }
+
             if (isIOS) {
-                // Show iOS instructions as a toast-like popup
                 showIOSInstallGuide();
-            } else if (deferredInstallPrompt) {
-                deferredInstallPrompt.prompt();
-                const { outcome } = await deferredInstallPrompt.userChoice;
-                if (outcome === 'accepted') {
-                    showToast('Ứng dụng đã được cài đặt!', 'success');
-                    headerInstallBtn.classList.add('hidden');
-                }
-                deferredInstallPrompt = null;
             } else {
-                showToast('Mở trình duyệt Chrome để cài đặt ứng dụng', 'info');
+                showAndroidInstallBanner(headerInstallBtn);
             }
         });
     }
@@ -1193,4 +1190,76 @@ function showIOSInstallGuide() {
             setTimeout(() => guide.remove(), 300);
         }
     }, 8000);
+}
+
+// Android Install Banner (reusable - called from header icon and auto-show)
+function showAndroidInstallBanner(headerInstallBtn) {
+    // Remove existing if any
+    const existing = document.getElementById('pwa-install-banner');
+    if (existing) { existing.remove(); return; }
+
+    // Ensure animation style exists
+    if (!document.getElementById('pwa-anim-style')) {
+        const animStyle = document.createElement('style');
+        animStyle.id = 'pwa-anim-style';
+        animStyle.textContent = `
+            @keyframes pwa-slide-up {
+                from { opacity: 0; transform: translateY(100px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+        `;
+        document.head.appendChild(animStyle);
+    }
+
+    const banner = document.createElement('div');
+    banner.id = 'pwa-install-banner';
+    banner.style.cssText = `
+        position: fixed;
+        bottom: 70px;
+        left: 12px;
+        right: 12px;
+        z-index: 9999;
+        background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #2563eb 100%);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 10px 40px rgba(37, 99, 235, 0.4), 0 4px 12px rgba(0,0,0,0.15);
+        animation: pwa-slide-up 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    `;
+    banner.innerHTML = `
+        <div style="display:flex;align-items:center;gap:12px;">
+            <div style="flex-shrink:0;width:44px;height:44px;background:rgba(255,255,255,0.2);border-radius:12px;display:flex;align-items:center;justify-content:center;">
+                <svg width="24" height="24" fill="none" stroke="white" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+            </div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:700;font-size:14px;color:white;margin-bottom:2px;">Cài đặt ứng dụng</div>
+                <div style="font-size:12px;color:rgba(255,255,255,0.8);">Thêm vào màn hình chính để truy cập nhanh hơn</div>
+            </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;">
+            <button id="pwa-dismiss-btn" style="flex:1;padding:10px;border-radius:10px;background:rgba(255,255,255,0.15);color:white;border:none;font-size:13px;font-weight:600;cursor:pointer;">Để sau</button>
+            <button id="pwa-install-btn" style="flex:1;padding:10px;border-radius:10px;background:white;color:#1e40af;border:none;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.1);">📲 Cài đặt</button>
+        </div>
+    `;
+    document.body.appendChild(banner);
+
+    // Dismiss button
+    banner.querySelector('#pwa-dismiss-btn').addEventListener('click', () => {
+        banner.style.animation = 'pwa-slide-up 0.3s ease reverse';
+        setTimeout(() => banner.remove(), 300);
+    });
+
+    // Install button
+    banner.querySelector('#pwa-install-btn').addEventListener('click', async () => {
+        if (deferredInstallPrompt) {
+            deferredInstallPrompt.prompt();
+            const { outcome } = await deferredInstallPrompt.userChoice;
+            if (outcome === 'accepted') {
+                showToast('Ứng dụng đã được cài đặt!', 'success');
+                if (headerInstallBtn) headerInstallBtn.classList.add('hidden');
+            }
+            deferredInstallPrompt = null;
+        }
+        banner.remove();
+    });
 }
