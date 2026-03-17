@@ -100,7 +100,10 @@ export function onShowDetailView() {
     if (container.querySelector('#hot-container')) {
         // Trigger resize observer to fix Handsontable layout in tabs
         setTimeout(() => {
-            if (hot) hot.refreshDimensions();
+            if (hot) {
+                hot.getPlugin('autoRowSize').clearCache();
+                hot.refreshDimensions();
+            }
         }, 50); // slight delay to ensure layout is visible
 
         // Background refresh

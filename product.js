@@ -8,10 +8,10 @@ let displayedData = []; // Filtered by Search Keyword
 let rawProducts = []; // Raw Product Metadata
 let rawDetails = []; // Raw Transaction Data
 let productRealtimeChannel = null;
-let isProductLoaded = false; 
-let currentManagingProduct = null; 
-let addProductFiles = []; 
-let savedSearchKeyword = ''; 
+let isProductLoaded = false;
+let currentManagingProduct = null;
+let addProductFiles = [];
+let savedSearchKeyword = '';
 
 // Date Filter State
 let productDateFilter = {
@@ -43,8 +43,8 @@ function getDateRangeByTypeProduct(type) {
     } else if (type === 'week') {
         const day = now.getDay();
         const diffToMonday = (day + 6) % 7;
-        const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - diffToMonday); startOfWeek.setHours(0,0,0,0);
-        const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6); endOfWeek.setHours(23,59,59,999);
+        const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - diffToMonday); startOfWeek.setHours(0, 0, 0, 0);
+        const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6); endOfWeek.setHours(23, 59, 59, 999);
         start = formatLocalDate(startOfWeek); end = formatLocalDate(endOfWeek);
     } else if (type === 'month') {
         const s = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -79,13 +79,13 @@ function checkPermission(action) {
     try {
         const perms = Array.isArray(currentUser[action]) ? currentUser[action] : JSON.parse(currentUser[action] || '[]');
         return perms.includes('view-san-pham');
-    } catch(e) { return false; }
+    } catch (e) { return false; }
 }
 
 // --- Custom Image Renderer ---
 function imageRenderer(instance, td, row, col, prop, value, cellProperties) {
     td.innerHTML = '';
-    td.className = 'htCenter htMiddle relative p-0'; 
+    td.className = 'htCenter htMiddle relative p-0';
 
     let images = [];
     try {
@@ -98,22 +98,22 @@ function imageRenderer(instance, td, row, col, prop, value, cellProperties) {
                         const parsed = JSON.parse(value);
                         if (Array.isArray(parsed)) images = parsed;
                         else images = [value];
-                    } catch(e) { images = [value]; }
+                    } catch (e) { images = [value]; }
                 } else {
-                    if(value.trim() !== '') images = [value];
+                    if (value.trim() !== '') images = [value];
                 }
             }
         }
-    } catch(e) { console.error("Image parse error", e); }
+    } catch (e) { console.error("Image parse error", e); }
 
     const container = document.createElement('div');
     container.className = 'flex items-center justify-center w-full h-full cursor-pointer relative hover:bg-gray-100 transition-colors';
     container.style.minHeight = '40px';
-    
+
     const rowData = instance.getSourceDataAtRow(instance.toPhysicalRow(row));
 
     container.ondblclick = (e) => {
-        e.stopPropagation(); 
+        e.stopPropagation();
         openImageManager(rowData);
     };
 
@@ -123,7 +123,7 @@ function imageRenderer(instance, td, row, col, prop, value, cellProperties) {
         const img = document.createElement('img');
         img.src = firstUrl;
         img.className = 'h-8 w-8 object-cover rounded border border-gray-200 dark:border-gray-600 shadow-sm bg-white dark:bg-gray-700';
-        img.onerror = () => { img.src = 'https://via.placeholder.com/32?text=Err'; }; 
+        img.onerror = () => { img.src = 'https://via.placeholder.com/32?text=Err'; };
         container.appendChild(img);
 
         if (count > 1) {
@@ -135,7 +135,7 @@ function imageRenderer(instance, td, row, col, prop, value, cellProperties) {
     } else {
         container.innerHTML = '<svg class="w-5 h-5 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>';
     }
-    
+
     td.appendChild(container);
     return td;
 }
@@ -144,7 +144,7 @@ function imageRenderer(instance, td, row, col, prop, value, cellProperties) {
 const BASE_COLUMNS = [
     { data: 'selected', type: 'checkbox', titleKey: 'prod_select', width: 40, className: 'htCenter' },
     { data: 'url_hinh_anh', type: 'text', titleKey: 'prod_image', width: 80, className: 'htCenter', renderer: imageRenderer, readOnly: true },
-    { data: 'ma_vt', type: 'text', titleKey: 'prod_ma_vt', width: 120, readOnly: true }, 
+    { data: 'ma_vt', type: 'text', titleKey: 'prod_ma_vt', width: 120, readOnly: true },
     { data: 'ten_vt', type: 'text', titleKey: 'prod_ten_vt', width: 200 },
     { data: 'listing', type: 'numeric', titleKey: 'prod_listing', width: 80, readOnly: true, className: 'htRight text-gray-600 font-bold' },
     { data: 'waiting', type: 'numeric', titleKey: 'prod_waiting', width: 80, readOnly: true, className: 'htRight text-blue-600 font-bold' },
@@ -157,7 +157,7 @@ const BASE_COLUMNS = [
 ];
 
 let columnSettings = [];
-let savedSortConfig = undefined; 
+let savedSortConfig = undefined;
 
 function handleProductEscKey(e) {
     if (e.key === 'Escape') {
@@ -177,26 +177,31 @@ function handleProductEscKey(e) {
 
 export function onShowProductView(params = null) {
     const container = document.getElementById('view-san-pham');
-    
+
     if (params && params.filterCode) {
         savedSearchKeyword = params.filterCode;
     }
 
     if (container.querySelector('#hot-product-container')) {
         const searchInput = document.getElementById('product-search');
-        if(searchInput) searchInput.value = savedSearchKeyword;
+        if (searchInput) searchInput.value = savedSearchKeyword;
 
         setLanguage(getCurrentLanguage());
         updateFilterButtonState();
-        
-        setTimeout(() => { if(hot) hot.refreshDimensions(); }, 50);
+
+        setTimeout(() => {
+            if (hot) {
+                hot.getPlugin('autoRowSize').clearCache();
+                hot.refreshDimensions();
+            }
+        }, 50);
 
         if (params && params.filterCode) {
             filterData(savedSearchKeyword);
         } else {
             fetchProductData(true);
         }
-        
+
         document.removeEventListener('keydown', handleProductEscKey);
         document.addEventListener('keydown', handleProductEscKey);
         return;
@@ -206,16 +211,16 @@ export function onShowProductView(params = null) {
     let exportPermissions = [];
     let importPermissions = [];
     if (currentUser.phan_quyen === 'Admin') {
-        exportPermissions = ['view-san-pham']; 
+        exportPermissions = ['view-san-pham'];
         importPermissions = ['view-san-pham'];
     } else {
-         try { exportPermissions = Array.isArray(currentUser.xuat) ? currentUser.xuat : JSON.parse(currentUser.xuat || '[]'); } catch(e) {}
-         try { importPermissions = Array.isArray(currentUser.nhap) ? currentUser.nhap : JSON.parse(currentUser.nhap || '[]'); } catch(e) {}
+        try { exportPermissions = Array.isArray(currentUser.xuat) ? currentUser.xuat : JSON.parse(currentUser.xuat || '[]'); } catch (e) { }
+        try { importPermissions = Array.isArray(currentUser.nhap) ? currentUser.nhap : JSON.parse(currentUser.nhap || '[]'); } catch (e) { }
     }
     const canExport = exportPermissions.includes('view-san-pham');
     const canImport = importPermissions.includes('view-san-pham');
     const canAdd = checkPermission('them');
-    
+
     let mobileAddMenuItems = `
         <button id="btn-prod-mobile-manual" class="block w-full text-left px-4 py-3 text-sm text-gray-700 hover:bg-gray-100 border-b border-gray-100 flex items-center gap-2">
             <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
@@ -439,7 +444,7 @@ export function onShowProductView(params = null) {
         </div>
         <div id="image-management-modal" class="hidden fixed inset-0 z-[11000] flex items-center justify-center modal-backdrop p-4"><div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl flex flex-col h-[80vh] md:h-[85vh] relative overflow-hidden"><div class="flex justify-between items-center p-4 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex-shrink-0"><h3 id="img-modal-title" class="font-bold text-lg text-gray-800 dark:text-white truncate">Quản lý hình ảnh</h3><button id="close-img-modal-btn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div><div id="img-modal-body" class="flex-1 p-4 overflow-y-auto bg-gray-100 dark:bg-gray-900 custom-scrollbar outline-none" tabindex="0"><div id="img-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div><div id="img-empty-state" class="hidden flex flex-col items-center justify-center h-full text-gray-400"><svg class="w-16 h-16 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg><p>Chưa có hình ảnh. Dán (Ctrl+V) hoặc chọn ảnh để thêm.</p></div></div><div class="p-4 border-t dark:border-gray-700 bg-white dark:bg-gray-800 flex justify-between items-center flex-shrink-0"><div class="text-xs text-gray-500 dark:text-gray-400 hidden md:block">Mẹo: Bạn có thể dán ảnh trực tiếp (Ctrl+V) vào cửa sổ này. Kéo thả để sắp xếp.</div><div class="flex gap-3"><label class="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200 px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>Thêm ảnh<input type="file" id="img-modal-file-input" multiple accept="image/*" class="hidden"></label><button id="btn-download-all-imgs" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors shadow-sm"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>Tải xuống tất cả</button></div></div></div></div><div id="column-settings-modal" class="hidden fixed inset-0 z-[10000] flex items-center justify-center modal-backdrop p-4"><div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-sm flex flex-col max-h-[80vh]"><div class="p-4 border-b dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-700 rounded-t-xl"><h3 class="text-lg font-bold text-gray-800 dark:text-white" data-i18n="col_manager_title">Quản lý cột</h3><button id="close-col-settings-btn" class="text-gray-500 hover:text-gray-700 dark:text-gray-400"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div><div class="p-2 bg-yellow-50 dark:bg-yellow-900/20 text-xs text-yellow-800 dark:text-yellow-200 border-b dark:border-gray-700 text-center">Kéo thả để sắp xếp. Ghim để đưa lên đầu.</div><div id="column-list-container" class="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar"></div><div class="p-4 border-t dark:border-gray-700 flex justify-end"><button id="btn-save-cols" class="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 font-medium shadow-md" data-i18n="btn_save">Áp dụng</button></div></div></div>
     `;
-    
+
     setLanguage(getCurrentLanguage());
     loadUserSettings();
 
@@ -448,15 +453,15 @@ export function onShowProductView(params = null) {
 
     const initCore = (silent) => {
         initHandsontable();
-        updateTableData(); 
+        updateTableData();
         setupToolbarListeners();
         setupExportListeners();
-        setupImageModalListeners(); 
-        setupAddProductFormListeners(); 
+        setupImageModalListeners();
+        setupAddProductFormListeners();
         setupProductDateFilterListeners(); // NEW: Date Filter Listeners
-        
+
         const resizeObserver = new ResizeObserver(() => {
-            if(hot) hot.refreshDimensions();
+            if (hot) hot.refreshDimensions();
         });
         resizeObserver.observe(document.getElementById('hot-product-container'));
 
@@ -469,13 +474,13 @@ export function onShowProductView(params = null) {
         fetchProductData(silent);
     };
 
-    if(isProductLoaded) {
+    if (isProductLoaded) {
         initCore(true);
     } else {
         initCore(false);
     }
 
-    if(!productRealtimeChannel) {
+    if (!productRealtimeChannel) {
         productRealtimeChannel = sb.channel('public:product_changes')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'product' }, () => fetchProductData(true))
             .on('postgres_changes', { event: '*', schema: 'public', table: 'detail' }, () => fetchProductData(true))
@@ -519,8 +524,8 @@ function setupProductDateFilterListeners() {
         } else if (type === 'week') {
             const day = now.getDay();
             const diffToMonday = (day + 6) % 7;
-            const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - diffToMonday); startOfWeek.setHours(0,0,0,0);
-            const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6); endOfWeek.setHours(23,59,59,999);
+            const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - diffToMonday); startOfWeek.setHours(0, 0, 0, 0);
+            const endOfWeek = new Date(startOfWeek); endOfWeek.setDate(startOfWeek.getDate() + 6); endOfWeek.setHours(23, 59, 59, 999);
             start = formatLocal(startOfWeek); end = formatLocal(endOfWeek);
         } else if (type === 'month') {
             const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -568,7 +573,7 @@ function setupProductDateFilterListeners() {
             productDateFilter.type = 'custom';
             productDateFilter.start = start;
             productDateFilter.end = end;
-            updateActiveButton('custom'); 
+            updateActiveButton('custom');
             recalcProductData();
         } else {
             showToast(t('select_dates_error'), "info");
@@ -579,14 +584,14 @@ function setupProductDateFilterListeners() {
 function isDateInProductRange(dateString) {
     if (!dateString) return false;
     const d = new Date(dateString);
-    d.setHours(0,0,0,0);
+    d.setHours(0, 0, 0, 0);
     const { type, start, end } = productDateFilter;
 
     if (type === 'all') return true;
 
     if (type === 'custom' && start && end) {
-        const s = parseYMD(start); if (s) s.setHours(0,0,0,0);
-        const e = parseYMD(end); if (e) e.setHours(23,59,59,999);
+        const s = parseYMD(start); if (s) s.setHours(0, 0, 0, 0);
+        const e = parseYMD(end); if (e) e.setHours(23, 59, 59, 999);
         if (s && e) return d >= s && d <= e;
         return false;
     }
@@ -594,8 +599,8 @@ function isDateInProductRange(dateString) {
     if (type && type !== 'custom' && type !== 'all') {
         const range = getDateRangeByTypeProduct(type);
         if (range && range.start && range.end) {
-            const s = parseYMD(range.start); if (s) s.setHours(0,0,0,0);
-            const e = parseYMD(range.end); if (e) e.setHours(23,59,59,999);
+            const s = parseYMD(range.start); if (s) s.setHours(0, 0, 0, 0);
+            const e = parseYMD(range.end); if (e) e.setHours(23, 59, 59, 999);
             if (s && e) return d >= s && d <= e;
         }
     }
@@ -605,15 +610,15 @@ function isDateInProductRange(dateString) {
 // --- Data Fetching & Calculation ---
 
 async function fetchProductData(silent = false) {
-    if(!silent) showLoading(true);
-    
+    if (!silent) showLoading(true);
+
     // 1. Fetch Products
     const { data: prods, error: pErr } = await sb.from('product').select('*').order('ma_vt', { ascending: true });
-    
+
     // 2. Fetch Details (Only needed columns)
     const { data: dets, error: dErr } = await sb.from('detail').select('ma_vt, quota, sl_trung, tinh_trang, ngay');
 
-    if(!silent) showLoading(false);
+    if (!silent) showLoading(false);
 
     if (pErr || dErr) {
         const msg = (pErr?.message || dErr?.message) || '';
@@ -637,10 +642,10 @@ function recalcProductData() {
     filteredDetails.forEach(d => {
         if (!d.ma_vt) return;
         if (!stats[d.ma_vt]) stats[d.ma_vt] = { listing: 0, waiting: 0, win: 0, fail: 0 };
-        
+
         const q = d.quota || 0;
         const w = d.sl_trung || 0;
-        
+
         if (d.tinh_trang === 'Listing') stats[d.ma_vt].listing += q;
         else if (d.tinh_trang === 'Waiting') stats[d.ma_vt].waiting += q;
         else if (d.tinh_trang === 'Win') stats[d.ma_vt].win += w;
@@ -658,10 +663,10 @@ function recalcProductData() {
     }));
 
     // 4. Update View
-    if(savedSearchKeyword) filterData(savedSearchKeyword);
+    if (savedSearchKeyword) filterData(savedSearchKeyword);
     else displayedData = [...allData];
-    
-    if(hot) updateTableData();
+
+    if (hot) updateTableData();
 }
 
 function loadUserSettings() {
@@ -682,7 +687,7 @@ function loadUserSettings() {
             const currentKeys = new Set(BASE_COLUMNS.map(c => c.data));
             columnSettings = mergedSettings.filter(c => currentKeys.has(c.data));
             return;
-        } catch(e) { console.error("Settings load error", e); }
+        } catch (e) { console.error("Settings load error", e); }
     }
     columnSettings = BASE_COLUMNS.map(c => ({
         data: c.data,
@@ -699,16 +704,16 @@ function saveUserSettings() {
     columnSettings.forEach(setting => {
         const visualIndex = hot.propToCol(setting.data);
         if (visualIndex !== null && visualIndex !== undefined && visualIndex >= 0) {
-            const cellMeta = hot.getCellMeta(0, visualIndex); 
+            const cellMeta = hot.getCellMeta(0, visualIndex);
             if (cellMeta && cellMeta.className) {
-                 const classes = cellMeta.className.split(' ');
-                 const alignmentClasses = classes.filter(c => 
+                const classes = cellMeta.className.split(' ');
+                const alignmentClasses = classes.filter(c =>
                     ['htLeft', 'htCenter', 'htRight', 'htJustify', 'htTop', 'htMiddle', 'htBottom'].includes(c)
-                 );
-                 const def = BASE_COLUMNS.find(c => c.data === setting.data);
-                 const baseClasses = def && def.className ? def.className.split(' ') : [];
-                 const nonAlignBase = baseClasses.filter(c => !['htLeft', 'htCenter', 'htRight', 'htJustify', 'htTop', 'htMiddle', 'htBottom'].includes(c));
-                 setting.className = [...nonAlignBase, ...alignmentClasses].join(' ');
+                );
+                const def = BASE_COLUMNS.find(c => c.data === setting.data);
+                const baseClasses = def && def.className ? def.className.split(' ') : [];
+                const nonAlignBase = baseClasses.filter(c => !['htLeft', 'htCenter', 'htRight', 'htJustify', 'htTop', 'htMiddle', 'htBottom'].includes(c));
+                setting.className = [...nonAlignBase, ...alignmentClasses].join(' ');
             }
         }
     });
@@ -716,7 +721,7 @@ function saveUserSettings() {
     const settings = {
         columnSettings: columnSettings,
         fixedColumnsLeft: hot.getSettings().fixedColumnsLeft,
-        sortConfig: sortConfig 
+        sortConfig: sortConfig
     };
     localStorage.setItem(getStorageKey(), JSON.stringify(settings));
 }
@@ -727,11 +732,11 @@ function getProcessedColumns() {
         if (setting.isVisible) {
             const def = BASE_COLUMNS.find(c => c.data === setting.data);
             if (def) {
-                activeCols.push({ 
-                    ...def, 
+                activeCols.push({
+                    ...def,
                     title: def.titleKey ? t(def.titleKey) : def.data,
                     width: setting.width || def.width,
-                    className: setting.className || def.className || '' 
+                    className: setting.className || def.className || ''
                 });
             }
         }
@@ -748,16 +753,16 @@ function initHandsontable() {
     const isMobile = window.innerWidth < 768;
 
     hot = new Handsontable(container, {
-        data: [], 
+        data: [],
         columns: userCols,
-        readOnly: !canEdit, 
-        rowHeaders: false, 
+        readOnly: !canEdit,
+        rowHeaders: false,
         colHeaders: true,
         height: '100%',
         width: '100%',
         stretchH: 'all',
         fixedColumnsLeft: pinnedCount,
-        autoRowSize: true, 
+        autoRowSize: true,
         viewportRowRenderingOffset: 50, // Increased buffer for smoother scroll
         viewportColumnRenderingOffset: 20, // Increased buffer for horizontal scroll
         manualColumnResize: true,
@@ -773,9 +778,9 @@ function initHandsontable() {
         licenseKey: 'non-commercial-and-evaluation',
         autoWrapRow: true,
         autoWrapCol: true,
-        
+
         // Mobile Selection Logic: Block selecting Read-Only cells
-        beforeOnCellMouseDown: function(event, coords, TD) {
+        beforeOnCellMouseDown: function (event, coords, TD) {
             if (isMobile && coords.row >= 0 && coords.col >= 0) {
                 const cellMeta = this.getCellMeta(coords.row, coords.col);
                 if (cellMeta.readOnly) {
@@ -784,7 +789,7 @@ function initHandsontable() {
                 }
             }
         },
-        
+
         afterColumnResize: (newSize, column) => {
             const visibleCols = columnSettings.filter(c => c.isVisible);
             if (visibleCols[column]) {
@@ -792,8 +797,8 @@ function initHandsontable() {
                 saveUserSettings();
             }
         },
-        afterFilter: () => { 
-            updateFilterButtonState(); 
+        afterFilter: () => {
+            updateFilterButtonState();
             calculateHotTotals(); // Recalculate stats on filter
         },
         afterColumnSort: () => { saveUserSettings(); },
@@ -801,8 +806,8 @@ function initHandsontable() {
         afterSelectionEnd: (row, col, row2, col2) => { calculateSelectionStats(row, col, row2, col2); },
         afterDeselect: () => { document.getElementById('prod-selection-stats').innerHTML = ''; },
         afterOnCellDblClick: async (event, coords, td) => {
-            if (coords.row < 0 || coords.col < 0) return; 
-            
+            if (coords.row < 0 || coords.col < 0) return;
+
             const rowData = hot.getSourceDataAtRow(hot.toPhysicalRow(coords.row));
             const colProp = hot.colToProp(coords.col);
 
@@ -823,9 +828,9 @@ function initHandsontable() {
                 if (prop === 'selected') {
                     rowData.selected = newVal;
                     hasSelectionChange = true;
-                    continue; 
+                    continue;
                 }
-                if(['ma_vt','listing','waiting','win','fail','url_hinh_anh'].includes(prop)) continue; 
+                if (['ma_vt', 'listing', 'waiting', 'win', 'fail', 'url_hinh_anh'].includes(prop)) continue;
 
                 const maVt = rowData.ma_vt;
                 if (!maVt) continue;
@@ -833,7 +838,7 @@ function initHandsontable() {
                     const { error } = await sb.from('product').update({ [prop]: newVal }).eq('ma_vt', maVt);
                     if (error) {
                         showToast(t('prod_update_error').replace('{msg}', error.message), 'error');
-                        fetchProductData(true); 
+                        fetchProductData(true);
                     }
                 } catch (e) { console.error(e); }
             }
@@ -843,11 +848,11 @@ function initHandsontable() {
             const maVtsToDelete = [];
             physicalRows.forEach(pRow => {
                 const rowData = hot.getSourceDataAtRow(pRow);
-                if(rowData && rowData.ma_vt) maVtsToDelete.push(rowData.ma_vt);
+                if (rowData && rowData.ma_vt) maVtsToDelete.push(rowData.ma_vt);
             });
             if (maVtsToDelete.length > 0) {
                 const confirmed = await showConfirm(t('confirm_delete_items').replace('{n}', maVtsToDelete.length), t('confirm_title'));
-                if (!confirmed) return false; 
+                if (!confirmed) return false;
                 showLoading(true);
                 const { error } = await sb.from('product').delete().in('ma_vt', maVtsToDelete);
                 showLoading(false);
@@ -894,7 +899,7 @@ function updateTableData() {
     calculateHotTotals();
     updateFilterButtonState();
     updateBulkDeleteButton();
-    setTimeout(() => hot.render(), 100); 
+    setTimeout(() => hot.render(), 100);
 }
 
 function calculateHotTotals() {
@@ -921,20 +926,20 @@ function calculateHotTotals() {
     });
 
     const fmt = (n) => n.toLocaleString('vi-VN');
-    const setVal = (id, val) => { const el = document.getElementById(id); if(el) el.textContent = fmt(val); };
+    const setVal = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = fmt(val); };
 
     // Update Mobile Stats
     setVal('mob-prod-listing', totalListing);
     setVal('mob-prod-waiting', totalWaiting);
     setVal('mob-prod-win', totalWin);
     setVal('mob-prod-fail', totalFail);
-    
+
     // Update Desktop Stats
     setVal('desk-prod-listing', totalListing);
     setVal('desk-prod-waiting', totalWaiting);
     setVal('desk-prod-win', totalWin);
     setVal('desk-prod-fail', totalFail);
-    
+
     // Update Row Count
     const rowCount = displayedData.length;
     const mobRowCount = document.getElementById('mob-prod-row-count');
@@ -978,7 +983,7 @@ function calculateSelectionStats(r1, c1, r2, c2) {
 }
 
 function filterData(keyword) {
-    savedSearchKeyword = keyword; 
+    savedSearchKeyword = keyword;
     if (!keyword || keyword.trim() === '') {
         displayedData = [...allData];
     } else {
@@ -991,11 +996,11 @@ function filterData(keyword) {
 }
 
 function updateFilterButtonState() {
-    if(!hot) return;
+    if (!hot) return;
     const btn = document.getElementById('btn-toggle-prod-filter');
     const container = document.getElementById('hot-product-container');
     const plugin = hot.getPlugin('filters');
-    if(!btn || !container) return;
+    if (!btn || !container) return;
     const hasConditions = plugin.conditionCollection && !plugin.conditionCollection.isEmpty();
     const isVisible = !container.classList.contains('filters-hidden');
     btn.classList.remove('bg-blue-100', 'text-blue-700', 'bg-red-50', 'text-red-600', 'hover:bg-red-100');
@@ -1016,25 +1021,25 @@ function updateFilterButtonState() {
 
 function setupToolbarListeners() {
     const searchInput = document.getElementById('product-search');
-    if(searchInput) searchInput.addEventListener('input', (e) => { filterData(e.target.value); });
+    if (searchInput) searchInput.addEventListener('input', (e) => { filterData(e.target.value); });
 
     const filterBtn = document.getElementById('btn-toggle-prod-filter');
-    if(filterBtn) filterBtn.onclick = () => {
-        if(!hot) return;
+    if (filterBtn) filterBtn.onclick = () => {
+        if (!hot) return;
         const container = document.getElementById('hot-product-container');
         const plugin = hot.getPlugin('filters');
         const hasConditions = plugin.conditionCollection && !plugin.conditionCollection.isEmpty();
-        if (hasConditions) { plugin.clearConditions(); plugin.filter(); hot.render(); } 
+        if (hasConditions) { plugin.clearConditions(); plugin.filter(); hot.render(); }
         else { container.classList.toggle('filters-hidden'); updateFilterButtonState(); }
     };
 
     const statsBtn = document.getElementById('btn-toggle-prod-stats');
-    if(statsBtn) {
+    if (statsBtn) {
         statsBtn.onclick = () => {
             const panel = document.getElementById('prod-stats-mobile');
-            if(panel) {
+            if (panel) {
                 panel.classList.toggle('hidden');
-                if(hot) setTimeout(() => hot.refreshDimensions(), 100);
+                if (hot) setTimeout(() => hot.refreshDimensions(), 100);
             }
         };
     }
@@ -1058,11 +1063,11 @@ function setupToolbarListeners() {
     const btnMobManual = document.getElementById('btn-prod-mobile-manual');
     const btnMobExcel = document.getElementById('btn-prod-mobile-excel');
     const btnMobTemplate = document.getElementById('btn-prod-mobile-template');
-    if(btnMobManual) {
-        btnMobManual.onclick = () => { mobileDropdown.classList.add('hidden'); const addForm = document.getElementById('add-product-form'); if(addForm) addForm.reset(); document.getElementById('add-product-modal').classList.remove('hidden'); populateAutocompletes(); };
+    if (btnMobManual) {
+        btnMobManual.onclick = () => { mobileDropdown.classList.add('hidden'); const addForm = document.getElementById('add-product-form'); if (addForm) addForm.reset(); document.getElementById('add-product-modal').classList.remove('hidden'); populateAutocompletes(); };
     }
-    if(btnMobExcel) { btnMobExcel.onclick = () => { mobileDropdown.classList.add('hidden'); inputImport.click(); }; }
-    if(btnMobTemplate) { btnMobTemplate.onclick = () => { mobileDropdown.classList.add('hidden'); downloadProductTemplate(); }; }
+    if (btnMobExcel) { btnMobExcel.onclick = () => { mobileDropdown.classList.add('hidden'); inputImport.click(); }; }
+    if (btnMobTemplate) { btnMobTemplate.onclick = () => { mobileDropdown.classList.add('hidden'); downloadProductTemplate(); }; }
 
     const btnAdd = document.getElementById('btn-add-product');
     const addModal = document.getElementById('add-product-modal');
@@ -1087,7 +1092,7 @@ function setupToolbarListeners() {
             const modal = document.getElementById('column-settings-modal');
             const listContainer = document.getElementById('column-list-container');
             const saveBtn = document.getElementById('btn-save-cols');
-            
+
             listContainer.innerHTML = '';
             const sortedSettings = [...columnSettings].sort((a, b) => (a.isPinned === b.isPinned ? 0 : a.isPinned ? -1 : 1));
 
@@ -1112,13 +1117,13 @@ function setupToolbarListeners() {
                     const checkbox = el.querySelector('.col-vis-check');
                     checkbox.checked = !checkbox.checked;
                     const target = columnSettings.find(c => c.data === col.data);
-                    if(target) target.isVisible = checkbox.checked;
+                    if (target) target.isVisible = checkbox.checked;
                 };
                 el.querySelector('.btn-pin').onclick = (e) => {
                     e.stopPropagation();
                     const target = columnSettings.find(c => c.data === col.data);
-                    if(target) target.isPinned = !target.isPinned;
-                    colBtn.click(); 
+                    if (target) target.isPinned = !target.isPinned;
+                    colBtn.click();
                 };
                 listContainer.appendChild(el);
             });
@@ -1150,7 +1155,7 @@ function setupToolbarListeners() {
     }
 
     window.addEventListener('languageChanged', () => {
-        if(!hot) return;
+        if (!hot) return;
         const userCols = getProcessedColumns();
         hot.updateSettings({ columns: userCols });
         updateFilterButtonState();
@@ -1205,15 +1210,15 @@ function handleProductImport(event) {
             const keyMap = { 'Mã VT': 'ma_vt', 'Tên Vật Tư': 'ten_vt', 'Cấu hình 1': 'cau_hinh_1', 'Cấu hình 2': 'cau_hinh_2', 'Ngành': 'nganh', 'Nhóm Sản Phẩm': 'group_product' };
             const inserts = jsonData.map(row => {
                 const newRow = {};
-                Object.keys(row).forEach(k => { if(keyMap[k.trim()]) newRow[keyMap[k.trim()]] = row[k]; });
+                Object.keys(row).forEach(k => { if (keyMap[k.trim()]) newRow[keyMap[k.trim()]] = row[k]; });
                 return newRow;
             }).filter(r => r.ma_vt);
-            if(inserts.length === 0) throw new Error("Không tìm thấy cột 'Mã VT' hoặc dữ liệu hợp lệ.");
+            if (inserts.length === 0) throw new Error("Không tìm thấy cột 'Mã VT' hoặc dữ liệu hợp lệ.");
             const { error } = await sb.from('product').upsert(inserts, { onConflict: 'ma_vt', ignoreDuplicates: true });
             if (error) throw error;
             showToast(t('import_success'), 'success');
             fetchProductData();
-        } catch (error) { showToast(t('import_error').replace('{msg}', error.message), "error"); } 
+        } catch (error) { showToast(t('import_error').replace('{msg}', error.message), "error"); }
         finally { showLoading(false); event.target.value = ''; }
     };
     reader.readAsArrayBuffer(file);
@@ -1224,7 +1229,7 @@ function setupExportListeners() {
     const dropdown = document.getElementById('prod-export-dropdown');
     const btnFiltered = document.getElementById('btn-prod-export-filtered');
     const btnAll = document.getElementById('btn-prod-export-all');
-    if(!btn || !dropdown) return;
+    if (!btn || !dropdown) return;
     btn.onclick = (e) => { e.stopPropagation(); dropdown.classList.toggle('hidden'); };
     document.addEventListener('click', (e) => { if (!dropdown.classList.contains('hidden') && !dropdown.contains(e.target) && !btn.contains(e.target)) dropdown.classList.add('hidden'); });
     btnFiltered.onclick = () => { exportToExcel('filtered'); dropdown.classList.add('hidden'); };
@@ -1245,15 +1250,15 @@ function exportToExcel(type) {
             if (type === 'filtered') {
                 const visualCols = hot.countCols();
                 const visualRows = hot.countRows();
-                for(let r=0; r<visualRows; r++) {
+                for (let r = 0; r < visualRows; r++) {
                     let rowData = [];
-                    for(let c=0; c<visualCols; c++) {
+                    for (let c = 0; c < visualCols; c++) {
                         const prop = hot.colToProp(c);
                         if (prop !== 'selected' && visibleColSettings.find(s => s.data === prop)) {
                             rowData.push(hot.getDataAtCell(r, c));
                         }
                     }
-                    if(rowData.length > 0) dataToExport.push(rowData);
+                    if (rowData.length > 0) dataToExport.push(rowData);
                 }
             } else {
                 dataToExport = allData.map(row => visibleColSettings.map(setting => row[setting.data]));
@@ -1264,7 +1269,7 @@ function exportToExcel(type) {
             XLSX.utils.book_append_sheet(wb, ws, "SanPham");
             XLSX.writeFile(wb, `Product_Export_${type}.xlsx`);
             showToast(t('export_success'), "success");
-        } catch (e) { showToast(t('export_error').replace('{msg}', e.message), "error"); } 
+        } catch (e) { showToast(t('export_error').replace('{msg}', e.message), "error"); }
         finally { showLoading(false); }
     }, 100);
 }
@@ -1288,19 +1293,19 @@ function setupAddProductFormListeners() {
         renderAddProductPreviews();
         addModal.classList.remove('hidden');
         populateAutocompletes();
-        addForm.focus(); 
+        addForm.focus();
     };
 
-    if(btnAdd) btnAdd.onclick = resetForm;
+    if (btnAdd) btnAdd.onclick = resetForm;
     const btnMobManual = document.getElementById('btn-prod-mobile-manual');
-    if(btnMobManual) btnMobManual.onclick = () => {
+    if (btnMobManual) btnMobManual.onclick = () => {
         document.getElementById('prod-mobile-add-dropdown').classList.add('hidden');
         resetForm();
     };
 
     const closeAddModal = () => addModal.classList.add('hidden');
-    if(closeAddBtn) closeAddBtn.onclick = closeAddModal;
-    if(cancelAddBtn) cancelAddBtn.onclick = closeAddModal;
+    if (closeAddBtn) closeAddBtn.onclick = closeAddModal;
+    if (cancelAddBtn) cancelAddBtn.onclick = closeAddModal;
 
     imageInput.onchange = (e) => {
         if (e.target.files.length > 0) {
@@ -1308,7 +1313,7 @@ function setupAddProductFormListeners() {
                 addProductFiles.push(file);
             });
             renderAddProductPreviews();
-            e.target.value = ''; 
+            e.target.value = '';
         }
     };
 
@@ -1323,7 +1328,7 @@ function setupAddProductFormListeners() {
                 hasImages = true;
             }
         }
-        if(hasImages) renderAddProductPreviews();
+        if (hasImages) renderAddProductPreviews();
     });
 
     addForm.onsubmit = async (e) => {
@@ -1335,16 +1340,16 @@ function setupAddProductFormListeners() {
         const nganh = document.getElementById('new-nganh').value;
         const group_product = document.getElementById('new-group').value;
 
-    if (allData.some(i => i.ma_vt === ma_vt)) {
+        if (allData.some(i => i.ma_vt === ma_vt)) {
             showToast(t('prod_code_exists'), 'error');
             return;
         }
 
         showLoading(true);
         let uploadedUrls = [];
-        
+
         if (addProductFiles.length > 0) {
-            for(const file of addProductFiles) {
+            for (const file of addProductFiles) {
                 try {
                     const fileName = file.name || `pasted_image_${Date.now()}.png`;
                     const safeName = sanitizeFileName(`${Date.now()}-${fileName}`);
@@ -1353,13 +1358,13 @@ function setupAddProductFormListeners() {
                         const { data: publicUrlData } = sb.storage.from('hinh_anh').getPublicUrl(`public/${safeName}`);
                         if (publicUrlData) uploadedUrls.push(publicUrlData.publicUrl);
                     }
-                } catch(err) { console.error("Image upload error", err); }
+                } catch (err) { console.error("Image upload error", err); }
             }
         }
 
         const insertData = {
             ma_vt, ten_vt, cau_hinh_1, cau_hinh_2, nganh, group_product,
-            url_hinh_anh: JSON.stringify(uploadedUrls) 
+            url_hinh_anh: JSON.stringify(uploadedUrls)
         };
 
         const { error } = await sb.from('product').insert(insertData);
@@ -1378,7 +1383,7 @@ function setupAddProductFormListeners() {
 function renderAddProductPreviews() {
     const container = document.getElementById('add-prod-img-previews');
     if (!container) return;
-    
+
     container.innerHTML = '';
     if (addProductFiles.length === 0) {
         container.innerHTML = '<span class="text-gray-400 text-xs italic w-full text-center pointer-events-none">Khu vực dán ảnh (Ctrl+V) hoặc chọn bên dưới</span>';
@@ -1413,7 +1418,7 @@ function setupImageModalListeners() {
     if (!modal) return;
 
     closeBtn.onclick = () => modal.classList.add('hidden');
-    
+
     fileInput.onchange = async (e) => {
         if (e.target.files.length > 0) {
             await uploadImages(e.target.files);
@@ -1440,16 +1445,16 @@ function setupImageModalListeners() {
 
 function openImageManager(rowData) {
     if (!checkPermission('sua') && !checkPermission('xem')) return;
-    
+
     currentManagingProduct = rowData;
     const modal = document.getElementById('image-management-modal');
     const title = document.getElementById('img-modal-title');
-    
+
     if (!modal) return;
 
     title.textContent = `${rowData.ten_vt || 'Sản phẩm'} (${rowData.ma_vt})`;
     renderImageGrid();
-    
+
     modal.classList.remove('hidden');
     document.getElementById('img-modal-body').focus();
 }
@@ -1457,7 +1462,7 @@ function openImageManager(rowData) {
 function renderImageGrid() {
     const container = document.getElementById('img-grid');
     const emptyState = document.getElementById('img-empty-state');
-    
+
     if (!container) return;
     container.innerHTML = '';
 
@@ -1469,13 +1474,13 @@ function renderImageGrid() {
                 images = raw;
             } else if (typeof raw === 'string') {
                 if (raw.startsWith('[')) {
-                    try { images = JSON.parse(raw); } catch(e) { images = [raw]; }
+                    try { images = JSON.parse(raw); } catch (e) { images = [raw]; }
                 } else {
                     images = [raw];
                 }
             }
         }
-    } catch(e) { images = []; }
+    } catch (e) { images = []; }
 
     if (images.length === 0) {
         emptyState.classList.remove('hidden');
@@ -1490,7 +1495,7 @@ function renderImageGrid() {
         const wrapper = document.createElement('div');
         wrapper.className = 'group relative aspect-square bg-gray-200 dark:bg-gray-700 rounded-lg overflow-hidden border dark:border-gray-600 shadow-sm cursor-grab active:cursor-grabbing';
         wrapper.setAttribute('data-url', url);
-        
+
         wrapper.innerHTML = `
             <img src="${url}" class="w-full h-full object-cover cursor-pointer hover:opacity-90 transition-opacity" onclick="window.open('${url}', '_blank')">
             <div class="absolute top-2 left-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm pointer-events-none">#${index + 1}</div>
@@ -1498,14 +1503,14 @@ function renderImageGrid() {
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
             </button>` : ''}
         `;
-        
+
         if (canEdit) {
             wrapper.querySelector('.btn-delete-img').onclick = (e) => {
                 e.stopPropagation();
                 deleteImage(index);
             };
         }
-        
+
         container.appendChild(wrapper);
     });
 
@@ -1513,25 +1518,25 @@ function renderImageGrid() {
         new Sortable(container, {
             animation: 150,
             ghostClass: 'opacity-50',
-            delay: 100, 
+            delay: 100,
             delayOnTouchOnly: true,
             onEnd: async (evt) => {
                 if (evt.oldIndex === evt.newIndex) return;
-                
+
                 const movedItem = images.splice(evt.oldIndex, 1)[0];
                 images.splice(evt.newIndex, 0, movedItem);
-                
+
                 showLoading(true);
                 const { error } = await sb.from('product').update({ url_hinh_anh: JSON.stringify(images) }).eq('ma_vt', currentManagingProduct.ma_vt);
                 showLoading(false);
-                
+
                 if (error) {
                     showToast(t('prod_update_error').replace('{msg}', error.message), 'error');
                     renderImageGrid();
                 } else {
                     currentManagingProduct.url_hinh_anh = JSON.stringify(images);
-                    renderImageGrid(); 
-                    fetchProductData(true); 
+                    renderImageGrid();
+                    fetchProductData(true);
                 }
             }
         });
@@ -1540,15 +1545,15 @@ function renderImageGrid() {
 
 async function uploadImages(fileList) {
     if (!currentManagingProduct || !checkPermission('sua')) return;
-    
+
     showLoading(true);
     const newUrls = [];
-    
+
     for (const file of fileList) {
         try {
             const safeName = sanitizeFileName(`${currentManagingProduct.ma_vt}-${Date.now()}-${file.name}`);
             const { data: uploadData, error: uploadError } = await sb.storage.from('hinh_anh').upload(`public/${safeName}`, file);
-            
+
             if (!uploadError) {
                 const { data: publicUrlData } = sb.storage.from('hinh_anh').getPublicUrl(`public/${safeName}`);
                 if (publicUrlData) newUrls.push(publicUrlData.publicUrl);
@@ -1565,18 +1570,18 @@ async function uploadImages(fileList) {
             if (Array.isArray(raw)) existingImages = raw;
             else if (typeof raw === 'string') {
                 if (raw.startsWith('[')) existingImages = JSON.parse(raw);
-                else if(raw) existingImages = [raw];
+                else if (raw) existingImages = [raw];
             }
-        } catch(e) { existingImages = []; }
+        } catch (e) { existingImages = []; }
 
         const combined = [...existingImages, ...newUrls];
-        
+
         const { error } = await sb.from('product').update({ url_hinh_anh: JSON.stringify(combined) }).eq('ma_vt', currentManagingProduct.ma_vt);
-        
+
         if (error) {
             showToast(t('prod_update_error').replace('{msg}', error.message), 'error');
         } else {
-            currentManagingProduct.url_hinh_anh = JSON.stringify(combined); 
+            currentManagingProduct.url_hinh_anh = JSON.stringify(combined);
             renderImageGrid();
             fetchProductData(true);
         }
@@ -1595,9 +1600,9 @@ async function deleteImage(index) {
         if (Array.isArray(raw)) existingImages = raw;
         else if (typeof raw === 'string') {
             if (raw.startsWith('[')) existingImages = JSON.parse(raw);
-            else if(raw) existingImages = [raw];
+            else if (raw) existingImages = [raw];
         }
-    } catch(e) { return; }
+    } catch (e) { return; }
 
     if (index >= 0 && index < existingImages.length) {
         existingImages.splice(index, 1);
@@ -1617,16 +1622,16 @@ async function deleteImage(index) {
 
 async function downloadAllImages() {
     if (!currentManagingProduct) return;
-    
+
     let images = [];
     try {
         const raw = currentManagingProduct.url_hinh_anh;
         if (Array.isArray(raw)) images = raw;
         else if (typeof raw === 'string') {
             if (raw.startsWith('[')) images = JSON.parse(raw);
-            else if(raw) images = [raw];
+            else if (raw) images = [raw];
         }
-    } catch(e) { return; }
+    } catch (e) { return; }
 
     if (images.length === 0) {
         showToast(t('no_images'), 'info');
@@ -1636,32 +1641,32 @@ async function downloadAllImages() {
     showLoading(true);
     try {
         const zip = new JSZip();
-        
+
         const promises = images.map(async (url, i) => {
             try {
                 const response = await fetch(url);
                 const blob = await response.blob();
-                
+
                 let ext = 'jpg';
                 const type = blob.type;
                 if (type === 'image/png') ext = 'png';
                 else if (type === 'image/jpeg') ext = 'jpg';
                 else if (type === 'image/webp') ext = 'webp';
-                
+
                 const filename = `hinh_anh_${currentManagingProduct.ma_vt}_${i + 1}.${ext}`;
                 zip.file(filename, blob);
-            } catch(e) { console.error("Fetch error", e); }
+            } catch (e) { console.error("Fetch error", e); }
         });
 
         await Promise.all(promises);
-        
+
         const content = await zip.generateAsync({ type: "blob" });
         const link = document.createElement("a");
         link.href = URL.createObjectURL(content);
         link.download = `hinh_anh_${currentManagingProduct.ma_vt}.zip`;
         link.click();
         URL.revokeObjectURL(link.href);
-        
+
         showToast(t('download_complete'), 'success');
     } catch (error) {
         console.error(error);
