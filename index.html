@@ -568,12 +568,21 @@
         @media (max-width: 768px) {
 
             .handsontable,
-            .handsontable td {
-                font-size: 0.7rem !important;
+            .handsontable th,
+            .handsontable td,
+            .handsontable .colHeader,
+            .handsontable .rowHeader {
+                font-size: 0.6rem !important;
             }
 
-            .handsontable th {
-                font-size: 0.7rem !important;
+            .handsontable th,
+            .handsontable .colHeader,
+            .handsontable .rowHeader {
+                font-weight: bold !important;
+            }
+
+            .handsontable td {
+                font-weight: normal !important;
             }
 
             .handsontable th,
