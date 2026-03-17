@@ -36,6 +36,19 @@ function dateRenderer(instance, td, row, col, prop, value, cellProperties) {
     td.className = 'htCenter'; // Center align dates
 }
 
+// Pen icon renderer for "used" action column
+function penIconRenderer(instance, td, row, col, prop, value, cellProperties) {
+    td.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;cursor:pointer;height:100%;" class="used-pen-icon" title="Xem SL sử dụng">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="color:#6366f1;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+    </div>`;
+    td.style.overflow = 'visible';
+    td.className = 'htCenter htMiddle';
+    td.style.position = 'sticky';
+    td.style.right = '0px';
+    td.style.zIndex = '50';
+    td.style.backgroundColor = document.documentElement.classList.contains('dark') ? '#1f2937' : '#ffffff';
+}
+
 // Base Column Definitions
 const BASE_COLUMNS = [
     { data: 'id', type: 'numeric', defaultHidden: true, readOnly: true }, // 0. Hidden ID
@@ -55,10 +68,13 @@ const BASE_COLUMNS = [
     { data: 'ngay_ky', type: 'text', titleKey: 'dt_ngay_ky', width: 90, renderer: dateRenderer }, // Custom Format
     { data: 'ngay_ket_thuc', type: 'text', titleKey: 'dt_ngay_kt', width: 90, renderer: dateRenderer }, // Custom Format
     { data: 'nganh', type: 'text', titleKey: 'dt_nganh', width: 100 },
-    { data: 'psr', type: 'text', titleKey: 'dt_psr', width: 80 }, 
+    { data: 'psr', type: 'text', titleKey: 'dt_psr', width: 80 },
     { data: 'quan_ly', type: 'text', titleKey: 'dt_quan_ly', width: 120 },
     { data: 'group_product', type: 'text', titleKey: 'dt_group_product', width: 120 }
 ];
+
+// Special action column (always last, not in column manager/export)
+const USED_ACTION_COLUMN = { data: '_used_action', type: 'text', title: '✏️', width: 40, readOnly: true, renderer: penIconRenderer, disableVisualSelection: true, filter: false, columnSorting: { headerAction: false } };
 
 // Current Column State (Order, Visibility)
 let columnSettings = [];
@@ -66,17 +82,17 @@ let savedSortConfig = undefined; // Store saved sort state
 
 export function onShowDetailView() {
     const container = document.getElementById('view-chi-tiet');
-    
+
     // check export permission
     let exportPermissions = [];
     if (currentUser.phan_quyen === 'Admin') {
         exportPermissions = ['view-chi-tiet']; // Admin can export everywhere
     } else {
-         if (Array.isArray(currentUser.xuat)) {
-             exportPermissions = currentUser.xuat;
-         } else if (typeof currentUser.xuat === 'string') {
-             try { exportPermissions = JSON.parse(currentUser.xuat); } catch(e) { exportPermissions = []; }
-         }
+        if (Array.isArray(currentUser.xuat)) {
+            exportPermissions = currentUser.xuat;
+        } else if (typeof currentUser.xuat === 'string') {
+            try { exportPermissions = JSON.parse(currentUser.xuat); } catch (e) { exportPermissions = []; }
+        }
     }
     const canExport = exportPermissions.includes('view-chi-tiet');
 
@@ -84,9 +100,9 @@ export function onShowDetailView() {
     if (container.querySelector('#hot-container')) {
         // Trigger resize observer to fix Handsontable layout in tabs
         setTimeout(() => {
-            if(hot) hot.refreshDimensions();
+            if (hot) hot.refreshDimensions();
         }, 50); // slight delay to ensure layout is visible
-        
+
         // Background refresh
         fetchDetailData(true);
         return;
@@ -281,11 +297,11 @@ export function onShowDetailView() {
             </div>
         </div>
     `;
-    
+
     // Apply initial translations immediately
     setLanguage(getCurrentLanguage());
 
-    loadUserSettings(); 
+    loadUserSettings();
 
     // Initialize Handsontable immediately with empty data if needed
     initHandsontable();
@@ -294,10 +310,10 @@ export function onShowDetailView() {
     setupColumnManager();
     setupExportListeners();
     setupDateFilterModal();
-    
+
     // Resize Observer to handle layout changes
     const resizeObserver = new ResizeObserver(() => {
-        if(hot) hot.refreshDimensions();
+        if (hot) hot.refreshDimensions();
     });
     resizeObserver.observe(document.getElementById('hot-container'));
 
@@ -306,13 +322,13 @@ export function onShowDetailView() {
     // If not, fetch in background.
     if (!isDetailLoaded) {
         // Do not await to prevent blocking UI switch
-        fetchDetailData(false); 
+        fetchDetailData(false);
     } else {
         // Silent refresh
         fetchDetailData(true);
     }
 
-    if(!detailRealtimeChannel) {
+    if (!detailRealtimeChannel) {
         detailRealtimeChannel = sb.channel('public:detail_view_changes')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'detail' }, () => {
                 fetchDetailData(true);
@@ -322,8 +338,8 @@ export function onShowDetailView() {
 }
 
 async function fetchDetailData(silent = false) {
-    if(!silent) showLoading(true);
-    
+    if (!silent) showLoading(true);
+
     let query = sb.from('detail').select('*').order('ngay', { ascending: false });
 
     // --- PERMISSION CHECK: View Role Logic ---
@@ -351,13 +367,13 @@ async function fetchDetailData(silent = false) {
             query = query.in('psr', allowedPsrs);
         } else {
             // Nếu không có tên và không có quyền xem ai -> Không trả về dữ liệu nào
-            query = query.eq('id', -1); 
+            query = query.eq('id', -1);
         }
     }
     // -----------------------------------------
 
     const { data, error } = await query;
-    if(!silent) showLoading(false);
+    if (!silent) showLoading(false);
 
     if (error) {
         showToast('Lỗi tải dữ liệu chi tiết: ' + error.message, 'error');
@@ -365,13 +381,13 @@ async function fetchDetailData(silent = false) {
     }
 
     allData = data || [];
-    isDetailLoaded = true; 
+    isDetailLoaded = true;
 
     const keyword = document.getElementById('detail-search')?.value || '';
-    if(keyword) filterData(keyword);
+    if (keyword) filterData(keyword);
     else displayedData = [...allData];
-    
-    if(hot) updateTableData();
+
+    if (hot) updateTableData();
 }
 
 function loadUserSettings() {
@@ -386,17 +402,17 @@ function loadUserSettings() {
                 isVisible: !c.defaultHidden,
                 isPinned: false,
                 width: c.width || 100,
-                className: '' 
+                className: ''
             }));
             const mergedSettings = [...settings.columnSettings, ...newCols];
             const currentKeys = new Set(BASE_COLUMNS.map(c => c.data));
             columnSettings = mergedSettings.filter(c => currentKeys.has(c.data));
             return settings;
-        } catch(e) { console.error("Settings load error", e); }
+        } catch (e) { console.error("Settings load error", e); }
     }
     columnSettings = BASE_COLUMNS.map(c => ({
         data: c.data,
-        isVisible: !c.defaultHidden, 
+        isVisible: !c.defaultHidden,
         isPinned: false,
         width: c.width || 100,
         className: ''
@@ -410,23 +426,23 @@ function saveUserSettings() {
     columnSettings.forEach(setting => {
         const visualIndex = hot.propToCol(setting.data);
         if (visualIndex !== null && visualIndex !== undefined && visualIndex >= 0) {
-            const cellMeta = hot.getCellMeta(0, visualIndex); 
+            const cellMeta = hot.getCellMeta(0, visualIndex);
             if (cellMeta && cellMeta.className) {
-                 const classes = cellMeta.className.split(' ');
-                 const alignClasses = classes.filter(c => 
+                const classes = cellMeta.className.split(' ');
+                const alignClasses = classes.filter(c =>
                     ['htLeft', 'htCenter', 'htRight', 'htJustify', 'htTop', 'htMiddle', 'htBottom'].includes(c)
-                 );
-                 setting.className = alignClasses.join(' ');
+                );
+                setting.className = alignClasses.join(' ');
             } else {
-                 setting.className = '';
+                setting.className = '';
             }
         }
     });
     const sortConfig = hot.getPlugin('columnSorting').getSortConfig();
     const settings = {
-        columnSettings: columnSettings, 
+        columnSettings: columnSettings,
         fixedColumnsLeft: hot.getSettings().fixedColumnsLeft,
-        sortConfig: sortConfig 
+        sortConfig: sortConfig
     };
     localStorage.setItem(getStorageKey(), JSON.stringify(settings));
 }
@@ -437,15 +453,17 @@ function getProcessedColumns() {
         if (setting.isVisible) {
             const def = BASE_COLUMNS.find(c => c.data === setting.data);
             if (def) {
-                activeCols.push({ 
-                    ...def, 
-                    title: def.titleKey ? t(def.titleKey) : def.data, 
-                    width: setting.width || def.width, 
-                    className: setting.className || '' 
+                activeCols.push({
+                    ...def,
+                    title: def.titleKey ? t(def.titleKey) : def.data,
+                    width: setting.width || def.width,
+                    className: setting.className || ''
                 });
             }
         }
     });
+    // Always append the pen icon action column at the end
+    activeCols.push({ ...USED_ACTION_COLUMN, title: '✏️' });
     return activeCols;
 }
 
@@ -459,9 +477,9 @@ function getDateRangeByType(type) {
         start = todayStr;
         end = todayStr;
     } else if (type === 'week') {
-        const day = now.getDay() || 7; 
+        const day = now.getDay() || 7;
         const startOfWeek = new Date(now);
-        if (day !== 1) startOfWeek.setHours(-24 * (day - 1)); 
+        if (day !== 1) startOfWeek.setHours(-24 * (day - 1));
         const endOfWeek = new Date(startOfWeek);
         endOfWeek.setDate(startOfWeek.getDate() + 6);
         start = startOfWeek.toISOString().split('T')[0];
@@ -515,12 +533,12 @@ function setupDateFilterModal() {
         applyBtn.onclick = () => {
             const start = inputStart.value;
             const end = inputEnd.value;
-            
+
             if (targetDateColumnIndex !== null && hot) {
                 const filtersPlugin = hot.getPlugin('filters');
                 filtersPlugin.removeConditions(targetDateColumnIndex);
                 if (start && end) filtersPlugin.addCondition(targetDateColumnIndex, 'between', [start, end]);
-                else if (start) filtersPlugin.addCondition(targetDateColumnIndex, 'after', [start]); 
+                else if (start) filtersPlugin.addCondition(targetDateColumnIndex, 'after', [start]);
                 else if (end) filtersPlugin.addCondition(targetDateColumnIndex, 'before', [end]);
                 filtersPlugin.filter();
                 hot.render();
@@ -546,13 +564,13 @@ function getDropdownMenuConfig() {
             'filter_action_bar': {},
             '---------': {},
             'date_filter_custom': {
-                name: t('ctx_advanced_date_filter'), 
-                callback: function(key, selection, clickEvent) {
+                name: t('ctx_advanced_date_filter'),
+                callback: function (key, selection, clickEvent) {
                     const visualColIndex = selection[0].start.col;
                     const physicalColIndex = this.toPhysicalColumn(visualColIndex);
                     openDateFilter(physicalColIndex);
                 },
-                hidden: function() {
+                hidden: function () {
                     const selection = this.getSelectedRangeLast();
                     if (!selection) return true;
                     const visualCol = selection.highlight.col;
@@ -572,26 +590,26 @@ function initHandsontable() {
     const isMobile = window.innerWidth < 768;
 
     hot = new Handsontable(container, {
-        data: [], 
+        data: [],
         columns: userCols,
-        readOnly: true, 
-        rowHeaders: false, 
+        readOnly: true,
+        rowHeaders: false,
         colHeaders: true,
         height: '100%',
         width: '100%',
         stretchH: 'all',
         fixedColumnsLeft: pinnedCount,
-        autoRowSize: true, 
+        autoRowSize: true,
         viewportRowRenderingOffset: 50, // Increased buffer
         viewportColumnRenderingOffset: 20, // Increased horizontal buffer for better sync
         manualColumnResize: true,
         manualRowResize: true,
         contextMenu: true,
-        filters: true, 
+        filters: true,
         columnSorting: {
             indicator: true,
             sortEmptyCells: true,
-            initialConfig: savedSortConfig 
+            initialConfig: savedSortConfig
         },
         dropdownMenu: getDropdownMenuConfig(),
         licenseKey: 'non-commercial-and-evaluation',
@@ -599,17 +617,18 @@ function initHandsontable() {
         autoWrapCol: true,
         // Disable selection on mobile to prevent accidental edits/highlighting when scrolling
         disableVisualSelection: isMobile ? ['current', 'area', 'header'] : false,
-        
+
         afterColumnResize: (newSize, column) => {
             const visibleCols = columnSettings.filter(c => c.isVisible);
+            // Skip resize for the action column (last column, not in visibleCols)
             if (visibleCols[column]) {
                 visibleCols[column].width = newSize;
                 saveUserSettings();
             }
         },
         afterFilter: () => {
-             updateFilterButtonState();
-             calculateHotTotals(); 
+            updateFilterButtonState();
+            calculateHotTotals();
         },
         afterSetCellMeta: (row, col, key, val) => {
             if (key === 'className') {
@@ -617,7 +636,7 @@ function initHandsontable() {
             }
         },
         afterColumnSort: (currentSortConfig, destinationSortConfigs) => {
-            saveUserSettings(); 
+            saveUserSettings();
         },
         afterSelectionEnd: (row, col, row2, col2) => {
             calculateSelectionStats(row, col, row2, col2);
@@ -625,6 +644,17 @@ function initHandsontable() {
         afterDeselect: () => {
             const statsContainer = document.getElementById('selection-stats');
             if (statsContainer) statsContainer.innerHTML = '';
+        },
+        afterOnCellMouseDown: (event, coords, td) => {
+            // Check if pen icon was clicked
+            if (coords.row < 0) return; // header
+            const prop = hot.colToProp(coords.col);
+            if (prop === '_used_action') {
+                const rowData = hot.getSourceDataAtRow(hot.toPhysicalRow(coords.row));
+                if (rowData) {
+                    openUsedModal(rowData);
+                }
+            }
         }
     });
 }
@@ -642,8 +672,8 @@ function updateTableData() {
 function calculateHotTotals() {
     if (!hot) return;
 
-    const visibleData = hot.getData(); 
-    
+    const visibleData = hot.getData();
+
     const quotaIdx = hot.propToCol('quota');
     const wonIdx = hot.propToCol('sl_trung');
     const statusIdx = hot.propToCol('tinh_trang');
@@ -652,7 +682,7 @@ function calculateHotTotals() {
     let listingQuota = 0;
     let waitingQuota = 0;
     let winQty = 0;
-    let winQuotaForCalc = 0; 
+    let winQuotaForCalc = 0;
     let failQuota = 0;
 
     visibleData.forEach(row => {
@@ -668,13 +698,13 @@ function calculateHotTotals() {
             }
             else if (status === 'Waiting') {
                 waitingQuota += q;
-            } 
+            }
             else if (status === 'Win') {
-                winQty += w; 
-                winQuotaForCalc += q; 
-            } 
+                winQty += w;
+                winQuotaForCalc += q;
+            }
             else if (status === 'Fail') {
-                failQuota += q; 
+                failQuota += q;
             }
         }
     });
@@ -688,13 +718,13 @@ function calculateHotTotals() {
         return `(${p.toFixed(1)}%)`;
     };
 
-    const setVal = (id, val) => { 
-        const el = document.getElementById(id); 
-        if(el) el.textContent = fmt(val); 
+    const setVal = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = fmt(val);
     };
-    const setPct = (id, val) => { 
-        const el = document.getElementById(id); 
-        if(el) el.textContent = pct(val); 
+    const setPct = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = pct(val);
     };
 
     // Update Mobile Stats IDs
@@ -772,9 +802,9 @@ function calculateSelectionStats(r1, c1, r2, c2) {
     }
 
     const fmt = (n) => n.toLocaleString('vi-VN', { maximumFractionDigits: 2 });
-    
+
     let html = `<div><span class="text-xs">${t('stat_count')}:</span> <span class="text-gray-800 dark:text-gray-200 font-bold text-xs">${count}</span></div>`;
-    
+
     if (hasNumeric) {
         html += `
             <div class="ml-2 pl-2 border-l border-gray-300 dark:border-gray-600"><span class="text-xs">${t('stat_sum')}:</span> <span class="text-gray-800 dark:text-gray-200 font-bold text-xs">${fmt(sum)}</span></div>
@@ -792,7 +822,7 @@ function filterData(keyword) {
     } else {
         const lower = keyword.toLowerCase();
         displayedData = allData.filter(item => {
-            return Object.values(item).some(val => 
+            return Object.values(item).some(val =>
                 String(val).toLowerCase().includes(lower)
             );
         });
@@ -801,12 +831,12 @@ function filterData(keyword) {
 }
 
 function updateFilterButtonState() {
-    if(!hot) return;
+    if (!hot) return;
     const btn = document.getElementById('btn-toggle-header-filter');
     const container = document.getElementById('hot-container');
     const plugin = hot.getPlugin('filters');
-    
-    if(!btn || !container) return;
+
+    if (!btn || !container) return;
 
     const hasConditions = plugin.conditionCollection && !plugin.conditionCollection.isEmpty();
     const isVisible = !container.classList.contains('filters-hidden');
@@ -838,7 +868,7 @@ function updateFilterButtonState() {
 }
 
 function handleFilterButtonClick() {
-    if(!hot) return;
+    if (!hot) return;
     const container = document.getElementById('hot-container');
     const plugin = hot.getPlugin('filters');
     const hasConditions = plugin.conditionCollection && !plugin.conditionCollection.isEmpty();
@@ -855,35 +885,35 @@ function handleFilterButtonClick() {
 
 function setupToolbarListeners() {
     const searchInput = document.getElementById('detail-search');
-    if(searchInput) searchInput.addEventListener('input', (e) => {
+    if (searchInput) searchInput.addEventListener('input', (e) => {
         filterData(e.target.value);
     });
 
     const filterBtn = document.getElementById('btn-toggle-header-filter');
-    if(filterBtn) filterBtn.onclick = handleFilterButtonClick;
+    if (filterBtn) filterBtn.onclick = handleFilterButtonClick;
 
     const statsToggleBtn = document.getElementById('btn-toggle-stats');
-    if(statsToggleBtn) {
+    if (statsToggleBtn) {
         statsToggleBtn.onclick = () => {
             const statsPanel = document.getElementById('stats-panel-mobile'); // Changed to mobile specific ID
-            if(statsPanel) {
+            if (statsPanel) {
                 statsPanel.classList.toggle('hidden');
                 // Re-calculate dimensions for Handsontable if needed, though flex should handle it
-                if(hot) setTimeout(() => hot.refreshDimensions(), 100);
+                if (hot) setTimeout(() => hot.refreshDimensions(), 100);
             }
         };
     }
 
     window.addEventListener('languageChanged', (e) => {
-        if(!hot) return;
+        if (!hot) return;
         const userCols = getProcessedColumns();
-        hot.updateSettings({ 
+        hot.updateSettings({
             columns: userCols,
-            dropdownMenu: getDropdownMenuConfig() 
+            dropdownMenu: getDropdownMenuConfig()
         });
         updateFilterButtonState();
         const selected = hot.getSelected();
-        if(selected && selected.length > 0) {
+        if (selected && selected.length > 0) {
             const [r1, c1, r2, c2] = selected[0];
             calculateSelectionStats(r1, c1, r2, c2);
         }
@@ -897,7 +927,7 @@ function setupExportListeners() {
     const btnFiltered = document.getElementById('btn-export-filtered');
     const btnAll = document.getElementById('btn-export-all');
 
-    if(!btn || !dropdown) return;
+    if (!btn || !dropdown) return;
 
     btn.onclick = (e) => {
         e.stopPropagation();
@@ -934,7 +964,8 @@ function exportToExcel(type) {
             let dataToExport = [];
             if (type === 'filtered') {
                 const hotData = hot.getData();
-                dataToExport = hotData;
+                // Exclude the last column (action column) from export
+                dataToExport = hotData.map(row => row.slice(0, -1));
             } else {
                 dataToExport = allData.map(row => {
                     return visibleColSettings.map(setting => {
@@ -947,7 +978,7 @@ function exportToExcel(type) {
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "ChiTiet");
             const now = new Date();
-            const timeStr = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`;
+            const timeStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
             const fileName = `Export_ChiTiet_${type}_${timeStr}.xlsx`;
             XLSX.writeFile(wb, fileName);
             showToast("Xuất Excel thành công!", "success");
@@ -968,7 +999,7 @@ function setupColumnManager() {
     const listContainer = document.getElementById('column-list-container');
     let sortable;
 
-    if(!btn) return;
+    if (!btn) return;
 
     btn.onclick = () => {
         renderColumnList();
@@ -976,7 +1007,7 @@ function setupColumnManager() {
     };
 
     const closeModal = () => modal.classList.add('hidden');
-    if(closeBtn) closeBtn.onclick = closeModal;
+    if (closeBtn) closeBtn.onclick = closeModal;
 
     const renderColumnList = () => {
         listContainer.innerHTML = '';
@@ -1005,7 +1036,7 @@ function setupColumnManager() {
             el.querySelector('.btn-pin').onclick = (e) => {
                 e.stopPropagation();
                 col.isPinned = !col.isPinned;
-                if(col.isPinned) {
+                if (col.isPinned) {
                     e.currentTarget.classList.add('pin-active', 'text-blue-500');
                     e.currentTarget.classList.remove('text-gray-400');
                 } else {
@@ -1043,7 +1074,7 @@ function setupColumnManager() {
         });
     };
 
-    if(saveBtn) saveBtn.onclick = () => {
+    if (saveBtn) saveBtn.onclick = () => {
         saveUserSettings();
         const userCols = getProcessedColumns();
         let pinnedCount = columnSettings.filter(c => c.isVisible && c.isPinned).length;
@@ -1053,4 +1084,563 @@ function setupColumnManager() {
         });
         closeModal();
     };
+}
+
+// =====================================================
+// === USED (Usage Tracking) Modal Logic ===
+// =====================================================
+
+let usedModalContext = null; // { ma_thau, ma_vt, sl_trung, ngay_ky, mt_code }
+let usedEntries = []; // current entries from DB
+let usedModalInitialized = false;
+let addingNewMonth = null; // pending new month string e.g. "03/27"
+let editingMonthId = null; // id of the row currently being inline edited
+
+function openUsedModal(rowData) {
+    const ma_thau = rowData.ma_thau || '';
+    const ma_vt = rowData.ma_vt || '';
+    const sl_trung = parseFloat(rowData.sl_trung) || 0;
+    const ngay_ky = rowData.ngay_ky || '';
+    const mt_code = `${ma_thau}_${ma_vt}`;
+
+    usedModalContext = { ma_thau, ma_vt, sl_trung, ngay_ky, mt_code };
+    addingNewMonth = null; // reset draft
+    editingMonthId = null; // reset edit
+
+    // Update header info
+    document.getElementById('used-ma-thau').textContent = ma_thau;
+    document.getElementById('used-ma-vt').textContent = ma_vt;
+    document.getElementById('used-sl-trung').textContent = sl_trung.toLocaleString('vi-VN');
+
+    if (!usedModalInitialized) {
+        setupUsedModalListeners();
+        usedModalInitialized = true;
+    }
+
+    // Show modal
+    document.getElementById('used-modal').classList.remove('hidden');
+
+    // Fetch and render entries
+    fetchUsedEntries();
+}
+
+async function fetchUsedEntries() {
+    if (!usedModalContext) return;
+
+    const { data, error } = await sb.from('used')
+        .select('*')
+        .eq('mt_code', usedModalContext.mt_code)
+        .order('id', { ascending: true });
+
+    if (error) {
+        showToast('Lỗi tải dữ liệu sử dụng: ' + error.message, 'error');
+        return;
+    }
+
+    usedEntries = data || [];
+    // Sort by month (chronological descending - newest at top)
+    usedEntries.sort((a, b) => parseMonthToSortKey(b.thang) - parseMonthToSortKey(a.thang));
+    renderUsedEntries();
+}
+
+function parseMonthToSortKey(thang) {
+    // Format: MM/YY => convert to YYMM for sorting
+    if (!thang) return 0;
+    const parts = thang.split('/');
+    if (parts.length !== 2) return 0;
+    const mm = parseInt(parts[0]) || 0;
+    const yy = parseInt(parts[1]) || 0;
+    return yy * 100 + mm;
+}
+
+function renderUsedEntries() {
+    const tbody = document.getElementById('used-entries-body');
+    const emptyMsg = document.getElementById('used-empty-msg');
+
+    let rowsHtml = '';
+
+    // If adding a new month, prepend the input row at the very top
+    if (addingNewMonth) {
+        const totalSd = usedEntries.reduce((sum, e) => sum + (parseFloat(e.sd) || 0), 0);
+        const remaining = usedModalContext.sl_trung - totalSd;
+
+        rowsHtml += `
+            <tr class="bg-indigo-50 dark:bg-indigo-900/20">
+                <td class="px-3 py-2.5">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded bg-indigo-200 dark:bg-indigo-800 text-indigo-800 dark:text-indigo-200 text-xs font-bold">${addingNewMonth}</span>
+                </td>
+                <td class="px-3 py-2.5">
+                    <input type="number" id="new-used-sd-input" class="w-24 px-2 py-1 text-sm border border-indigo-300 rounded focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-gray-700 dark:border-indigo-500 dark:text-white" placeholder="Max: ${Math.max(0, remaining)}" max="${Math.max(0, remaining)}" step="any">
+                </td>
+                <td class="px-3 py-2.5">
+                    <span class="text-xs text-gray-400 italic">Đang tạo...</span>
+                </td>
+                <td class="px-3 py-2.5 text-center flex items-center justify-center gap-1">
+                    <button class="btn-save-new-used p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600 transition-colors" title="Lưu (Enter)">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                    </button>
+                    <button class="btn-cancel-new-used p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 transition-colors" title="Hủy (Esc)">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }
+
+    rowsHtml += usedEntries.map(entry => {
+        const isEditing = entry.id === editingMonthId;
+        const totalSd = usedEntries.reduce((sum, e) => sum + (parseFloat(e.sd) || 0), 0);
+        // Exclude current entry sd from total to calculate remaining limit correctly
+        const remaining = usedModalContext.sl_trung - totalSd + (parseFloat(entry.sd) || 0);
+
+        if (isEditing) {
+            return `
+                <tr class="bg-yellow-50 dark:bg-yellow-900/20 transition-colors" data-id="${entry.id}">
+                    <td class="px-3 py-2.5">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded bg-yellow-100 dark:bg-yellow-900/40 text-yellow-700 dark:text-yellow-300 text-xs font-semibold">${entry.thang || ''}</span>
+                    </td>
+                    <td class="px-3 py-2.5">
+                        <input type="number" id="edit-used-sd-input-${entry.id}" value="${entry.sd}" class="w-24 px-2 py-1 text-sm border border-yellow-300 rounded focus:outline-none focus:ring-2 focus:ring-yellow-500 dark:bg-gray-700 dark:border-yellow-500 dark:text-white" placeholder="Max: ${Math.max(0, remaining)}" max="${Math.max(0, remaining)}" step="any">
+                    </td>
+                    <td class="px-3 py-2.5">
+                        <div class="text-[10px] text-gray-900 dark:text-gray-100 whitespace-pre-line leading-tight" title="${entry.update || ''}">${entry.update || '-'}</div>
+                    </td>
+                    <td class="px-3 py-2.5 text-center flex items-center justify-center gap-1">
+                        <button class="btn-save-edit-used p-1 rounded hover:bg-green-100 dark:hover:bg-green-900/30 text-green-600 transition-colors" data-id="${entry.id}" title="Lưu (Enter)">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                        </button>
+                        <button class="btn-cancel-edit-used p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 transition-colors" title="Hủy (Esc)">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }
+
+        return `
+            <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors" data-id="${entry.id}">
+                <td class="px-3 py-2.5">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold">${entry.thang || ''}</span>
+                </td>
+                <td class="px-3 py-2.5">
+                    <span class="font-bold text-gray-800 dark:text-gray-200">${(parseFloat(entry.sd) || 0).toLocaleString('vi-VN')}</span>
+                </td>
+                <td class="px-3 py-2.5">
+                    <div class="text-[10px] text-gray-900 dark:text-gray-100 whitespace-pre-line leading-tight" title="${entry.update || ''}">${entry.update || '-'}</div>
+                </td>
+                <td class="px-3 py-2.5 text-center flex items-center justify-center gap-1">
+                    <button class="btn-edit-used p-1 rounded hover:bg-yellow-100 dark:hover:bg-yellow-900/30 text-yellow-500 hover:text-yellow-600 transition-colors" data-id="${entry.id}" title="Sửa">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                    </button>
+                    <button class="btn-delete-used p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-400 hover:text-red-600 transition-colors" data-id="${entry.id}" title="Xóa">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    </button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    if (usedEntries.length === 0 && !addingNewMonth) {
+        tbody.innerHTML = '';
+        emptyMsg.classList.remove('hidden');
+    } else {
+        emptyMsg.classList.add('hidden');
+        tbody.innerHTML = rowsHtml;
+
+        // Attach delete handlers
+        tbody.querySelectorAll('.btn-delete-used').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const id = parseInt(btn.dataset.id);
+                deleteUsedEntry(id);
+            };
+        });
+
+        // Attach edit handlers
+        tbody.querySelectorAll('.btn-edit-used').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                editingMonthId = parseInt(btn.dataset.id);
+                renderUsedEntries();
+
+                // Focus the input
+                setTimeout(() => {
+                    const input = document.getElementById(`edit-used-sd-input-${editingMonthId}`);
+                    if (input) {
+                        input.focus();
+                        input.select();
+                    }
+                }, 50);
+            };
+        });
+
+        // Attach save edit handlers
+        tbody.querySelectorAll('.btn-save-edit-used').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const id = parseInt(btn.dataset.id);
+                const input = document.getElementById(`edit-used-sd-input-${id}`);
+                if (input) updateUsedEntry(id, input.value);
+            };
+        });
+
+        // Attach cancel edit handlers
+        tbody.querySelectorAll('.btn-cancel-edit-used').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                editingMonthId = null;
+                renderUsedEntries();
+            };
+        });
+
+        // Attach inline edit inputs key listeners
+        if (editingMonthId) {
+            const input = document.getElementById(`edit-used-sd-input-${editingMonthId}`);
+            if (input) {
+                input.onkeydown = (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        updateUsedEntry(editingMonthId, input.value);
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        editingMonthId = null;
+                        renderUsedEntries();
+                    }
+                };
+            }
+        }
+
+        // Attach handlers for the new draft row
+        if (addingNewMonth) {
+            const saveBtn = tbody.querySelector('.btn-save-new-used');
+            const cancelBtn = tbody.querySelector('.btn-cancel-new-used');
+            const inputEl = tbody.querySelector('#new-used-sd-input');
+
+            if (cancelBtn) {
+                cancelBtn.onclick = () => {
+                    addingNewMonth = null;
+                    renderUsedEntries();
+                };
+            }
+
+            if (saveBtn && inputEl) {
+                const handleSave = () => saveNewUsedMonth(inputEl.value);
+                saveBtn.onclick = handleSave;
+                inputEl.onkeydown = (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSave();
+                    } else if (e.key === 'Escape') {
+                        e.preventDefault();
+                        addingNewMonth = null;
+                        renderUsedEntries();
+                    }
+                };
+            }
+        }
+    }
+
+    updateUsedProgress();
+}
+
+function updateUsedProgress() {
+    if (!usedModalContext) return;
+    const totalSd = usedEntries.reduce((sum, e) => sum + (parseFloat(e.sd) || 0), 0);
+    const remaining = usedModalContext.sl_trung - totalSd;
+    const pct = usedModalContext.sl_trung > 0 ? Math.min((totalSd / usedModalContext.sl_trung) * 100, 100) : 0;
+
+    document.getElementById('used-total-sd').textContent = totalSd.toLocaleString('vi-VN');
+    document.getElementById('used-remaining').textContent = Math.max(0, remaining).toLocaleString('vi-VN');
+
+    const bar = document.getElementById('used-progress-bar');
+    bar.style.width = `${pct}%`;
+    // Color changes based on usage percentage
+    bar.className = 'h-2.5 rounded-full transition-all duration-300';
+    if (pct >= 100) {
+        bar.classList.add('bg-red-500');
+    } else if (pct >= 80) {
+        bar.classList.add('bg-orange-500');
+    } else {
+        bar.classList.add('bg-indigo-500');
+    }
+}
+
+function getNextMonth() {
+    if (!usedModalContext || !usedModalContext.ngay_ky) return null;
+
+    if (usedEntries.length === 0) {
+        // First month = month of ngay_ky
+        const dateKy = new Date(usedModalContext.ngay_ky);
+        if (isNaN(dateKy.getTime())) return null;
+
+        const startMonth = dateKy.getMonth() + 1; // 1-12
+        const startYear = dateKy.getFullYear() % 100; // 2-digit year
+
+        const mm = String(startMonth).padStart(2, '0');
+        const yy = String(startYear).padStart(2, '0');
+        return `${mm}/${yy}`;
+    }
+
+    // Find the max month in usedEntries
+    let maxSortKey = -1;
+    let latestThang = '';
+    for (const e of usedEntries) {
+        const k = parseMonthToSortKey(e.thang);
+        if (k > maxSortKey) {
+            maxSortKey = k;
+            latestThang = e.thang;
+        }
+    }
+
+    const parts = latestThang.split('/');
+    let lastMm = parseInt(parts[0]);
+    let lastYy = parseInt(parts[1]);
+
+    lastMm += 1;
+    if (lastMm > 12) {
+        lastMm = 1;
+        lastYy += 1;
+    }
+
+    const mm = String(lastMm).padStart(2, '0');
+    const yy = String(lastYy).padStart(2, '0');
+    return `${mm}/${yy}`;
+}
+
+async function addUsedMonth() {
+    if (!usedModalContext) return;
+
+    const errorMsg = document.getElementById('used-error-msg');
+    errorMsg.classList.add('hidden');
+
+    // Check if ngay_ky exists
+    if (!usedModalContext.ngay_ky) {
+        errorMsg.textContent = 'Chưa có ngày ký, không thể thêm tháng sử dụng!';
+        errorMsg.classList.remove('hidden');
+        return;
+    }
+
+    // Check remaining quantity
+    const totalSd = usedEntries.reduce((sum, e) => sum + (parseFloat(e.sd) || 0), 0);
+    if (totalSd >= usedModalContext.sl_trung) {
+        errorMsg.textContent = 'Đã sử dụng hết số lượng trúng thầu!';
+        errorMsg.classList.remove('hidden');
+        return;
+    }
+
+    const nextMonth = getNextMonth();
+    if (!nextMonth) {
+        errorMsg.textContent = 'Không thể xác định tháng tiếp theo!';
+        errorMsg.classList.remove('hidden');
+        return;
+    }
+
+    // Check for duplicate month
+    const exists = usedEntries.some(e => e.thang === nextMonth);
+    if (exists) {
+        errorMsg.textContent = `Tháng ${nextMonth} đã tồn tại!`;
+        errorMsg.classList.remove('hidden');
+        return;
+    }
+
+    // Set state to show the draft row
+    addingNewMonth = nextMonth;
+    renderUsedEntries();
+
+    // Focus the input
+    setTimeout(() => {
+        const input = document.getElementById('new-used-sd-input');
+        if (input) {
+            input.focus();
+        }
+    }, 50);
+}
+
+async function saveNewUsedMonth(sdStr) {
+    if (!usedModalContext || !addingNewMonth) return;
+
+    const sd = parseFloat(sdStr);
+    if (isNaN(sd) || sd < 0) {
+        showToast('Số lượng không hợp lệ!', 'error');
+        return;
+    }
+
+    const totalSd = usedEntries.reduce((sum, e) => sum + (parseFloat(e.sd) || 0), 0);
+    if (totalSd + sd > usedModalContext.sl_trung) {
+        showToast(`Tổng SL sử dụng (${(totalSd + sd).toLocaleString('vi-VN')}) vượt quá SL trúng (${usedModalContext.sl_trung.toLocaleString('vi-VN')})!`, 'error');
+        return;
+    }
+
+    // Generate update string (HH:mm - DD/MM/YYYY - Name)
+    const updateStr = getUsedUpdateString();
+
+    const randomId = Math.floor(Math.random() * 900000000) + 100000000;
+
+    const newEntry = {
+        id: randomId,
+        mt_code: usedModalContext.mt_code,
+        thang: addingNewMonth,
+        sd: sd,
+        update: updateStr
+    };
+
+    showLoading(true);
+    const { error } = await sb.from('used').insert([newEntry]);
+    showLoading(false);
+
+    if (error) {
+        showToast('Lỗi thêm dữ liệu: ' + error.message, 'error');
+        return;
+    }
+
+    showToast(`Đã thêm tháng ${addingNewMonth} với SL: ${sd.toLocaleString('vi-VN')}`, 'success');
+    addingNewMonth = null; // Clear state
+    await fetchUsedEntries();
+}
+
+async function updateUsedEntry(id, sdStr) {
+    if (!usedModalContext || !editingMonthId) return;
+
+    const entry = usedEntries.find(e => e.id === id);
+    if (!entry) return;
+
+    const sd = parseFloat(sdStr);
+    if (isNaN(sd) || sd < 0) {
+        showToast('Số lượng không hợp lệ!', 'error');
+        return;
+    }
+
+    const totalSd = usedEntries.reduce((sum, e) => sum + (e.id !== id ? (parseFloat(e.sd) || 0) : 0), 0);
+    if (totalSd + sd > usedModalContext.sl_trung) {
+        showToast(`Tổng SL sử dụng (${(totalSd + sd).toLocaleString('vi-VN')}) vượt quá SL trúng (${usedModalContext.sl_trung.toLocaleString('vi-VN')})!`, 'error');
+        return;
+    }
+
+    const newUpdateStr = getUsedUpdateString();
+    // Append the new update string to the beginning of the history
+    const updateStr = entry.update ? `${newUpdateStr}\n${entry.update}` : newUpdateStr;
+
+    showLoading(true);
+    const { error } = await sb.from('used').update({ sd: sd, update: updateStr }).eq('id', id);
+    showLoading(false);
+
+    if (error) {
+        showToast('Lỗi cặp nhật dữ liệu: ' + error.message, 'error');
+        return;
+    }
+
+    showToast(`Đã cặp nhật tháng ${entry.thang}`, 'success');
+    editingMonthId = null; // Clear state
+    await fetchUsedEntries();
+}
+
+function getUsedUpdateString() {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2, '0');
+    const min = String(now.getMinutes()).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yy = now.getFullYear();
+    const name = currentUser ? currentUser.ho_ten : 'Unknown';
+    return `${hh}:${min} - ${dd}/${mm}/${yy} - ${name}`;
+}
+
+async function deleteUsedEntry(id) {
+    const entry = usedEntries.find(e => e.id === id);
+    if (!entry) return;
+
+    const confirmModal = document.getElementById('used-confirm-modal');
+    const msgEl = document.getElementById('used-confirm-msg');
+    const btnCancel = document.getElementById('used-confirm-cancel');
+    const btnOk = document.getElementById('used-confirm-ok');
+
+    msgEl.textContent = `Bạn có chắc chắn muốn xóa dữ liệu tháng ${entry.thang}?`;
+    confirmModal.classList.remove('hidden');
+
+    return new Promise((resolve) => {
+        const handleCancel = () => {
+            confirmModal.classList.add('hidden');
+            cleanup();
+            resolve(false);
+        };
+
+        const handleOk = async () => {
+            confirmModal.classList.add('hidden');
+            cleanup();
+
+            showLoading(true);
+            const { error } = await sb.from('used').delete().eq('id', id);
+            showLoading(false);
+
+            if (error) {
+                showToast('Lỗi xóa dữ liệu: ' + error.message, 'error');
+                resolve(false);
+                return;
+            }
+
+            showToast(`Đã xóa tháng ${entry.thang}`, 'success');
+            await fetchUsedEntries();
+            resolve(true);
+        };
+
+        const cleanup = () => {
+            btnCancel.removeEventListener('click', handleCancel);
+            btnOk.removeEventListener('click', handleOk);
+        };
+
+        btnCancel.addEventListener('click', handleCancel);
+        btnOk.addEventListener('click', handleOk);
+    });
+}
+
+function setupUsedModalListeners() {
+    const modal = document.getElementById('used-modal');
+    const closeBtn = document.getElementById('close-used-modal-btn');
+    const addBtn = document.getElementById('btn-add-used-month');
+
+    if (closeBtn) closeBtn.onclick = () => {
+        modal.classList.add('hidden');
+        usedModalContext = null;
+        addingNewMonth = null;
+        editingMonthId = null;
+        usedEntries = [];
+    };
+
+    if (addBtn) addBtn.onclick = () => {
+        if (!addingNewMonth) {
+            addUsedMonth();
+        } else {
+            // If already adding, just focus the input
+            const input = document.getElementById('new-used-sd-input');
+            if (input) input.focus();
+        }
+    };
+
+    // Close on ESC key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) {
+            // Don't close if confirm modal is open
+            const confirmModal = document.getElementById('used-confirm-modal');
+            if (confirmModal && !confirmModal.classList.contains('hidden')) {
+                return;
+            }
+
+            modal.classList.add('hidden');
+            usedModalContext = null;
+            addingNewMonth = null;
+            editingMonthId = null;
+            usedEntries = [];
+        }
+    });
+
+    // Close on backdrop click
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) {
+            modal.classList.add('hidden');
+            usedModalContext = null;
+            addingNewMonth = null;
+            editingMonthId = null;
+            usedEntries = [];
+        }
+    });
 }
