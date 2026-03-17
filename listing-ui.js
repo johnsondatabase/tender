@@ -3,7 +3,7 @@ import { translations, getCurrentLanguage } from './lang.js';
 import { viewListingHistory } from './lichsu.js';
 import { checkPermission } from './listing.js';
 import * as ListingWin from './listing-win.js';
-import { showToast } from './app.js'; 
+import { showToast } from './app.js';
 
 const t = (key) => {
     const lang = getCurrentLanguage();
@@ -22,31 +22,31 @@ function escapeHtml(str) {
 }
 
 export const COLUMNS = {
-    'Listing': { 
-        labelKey: 'col_listing', 
-        borderColor: 'border-gray-300', 
-        bgColor: 'bg-gray-100', 
+    'Listing': {
+        labelKey: 'col_listing',
+        borderColor: 'border-gray-300',
+        bgColor: 'bg-gray-100',
         darkBgColor: 'dark:bg-gray-800',
         badgeColor: 'bg-gray-300 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
     },
-    'Waiting': { 
-        labelKey: 'col_waiting', 
-        borderColor: 'border-yellow-500', 
-        bgColor: 'bg-yellow-100', 
+    'Waiting': {
+        labelKey: 'col_waiting',
+        borderColor: 'border-yellow-500',
+        bgColor: 'bg-yellow-100',
         darkBgColor: 'dark:bg-yellow-900/20',
         badgeColor: 'bg-yellow-200 text-yellow-900 dark:bg-yellow-900 dark:text-yellow-300'
     },
-    'Win': { 
-        labelKey: 'col_win', 
-        borderColor: 'border-green-600', 
-        bgColor: 'bg-green-100', 
+    'Win': {
+        labelKey: 'col_win',
+        borderColor: 'border-green-600',
+        bgColor: 'bg-green-100',
         darkBgColor: 'dark:bg-green-900/20',
         badgeColor: 'bg-green-200 text-green-900 dark:bg-green-900 dark:text-green-300'
     },
-    'Fail': { 
-        labelKey: 'col_fail', 
-        borderColor: 'border-red-600', 
-        bgColor: 'bg-red-100', 
+    'Fail': {
+        labelKey: 'col_fail',
+        borderColor: 'border-red-600',
+        bgColor: 'bg-red-100',
         darkBgColor: 'dark:bg-red-900/20',
         badgeColor: 'bg-red-200 text-red-900 dark:bg-red-900 dark:text-red-300'
     }
@@ -70,13 +70,13 @@ export function renderBoard(data, currentMobileStatus) {
 
     Object.keys(COLUMNS).forEach(status => {
         const col = document.getElementById(`col-${status}`);
-        if(col) col.innerHTML = '';
+        if (col) col.innerHTML = '';
         const count = document.getElementById(`count-${status}`);
-        if(count) count.textContent = '0';
+        if (count) count.textContent = '0';
         const percent = document.getElementById(`percent-${status}`);
-        if(percent) percent.textContent = '(0%)';
+        if (percent) percent.textContent = '(0%)';
         const mobileCount = document.getElementById(`mobile-count-${status}`);
-        if(mobileCount) mobileCount.textContent = '0 (0%)';
+        if (mobileCount) mobileCount.textContent = '0 (0%)';
     });
 
     // Group items by status so we can sort per-column before rendering
@@ -112,10 +112,10 @@ export function renderBoard(data, currentMobileStatus) {
         const countEl = document.getElementById(`count-${status}`);
         const percentEl = document.getElementById(`percent-${status}`);
         const mobileCountEl = document.getElementById(`mobile-count-${status}`);
-        
+
         const count = col ? col.children.length : 0;
         const percentage = totalItems > 0 ? Math.round((count / totalItems) * 100) : 0;
-        
+
         if (countEl) countEl.textContent = count;
         if (percentEl) percentEl.textContent = `(${percentage}%)`;
         if (mobileCountEl) mobileCountEl.textContent = `${count} (${percentage}%)`;
@@ -131,12 +131,12 @@ function createCard(item) {
     const itemId = item.id !== undefined ? item.id : item.ma_thau;
     const progress = calculateProgress(item.ngay_ky, item.ngay_ket_thuc);
     const fmtDate = (d) => d ? new Date(d).toLocaleDateString('vi-VN') : '-';
-    
+
     let fileCount = 0;
     try {
         const files = typeof item.files === 'string' ? JSON.parse(item.files) : (item.files || []);
         fileCount = Array.isArray(files) ? files.length : 0;
-    } catch(e) { fileCount = 0; }
+    } catch (e) { fileCount = 0; }
 
     const wonPercent = item.stats.quota > 0 ? Math.round((item.stats.won / item.stats.quota) * 100) : 0;
 
@@ -159,16 +159,17 @@ function createCard(item) {
             </div>
         `;
     }
-    
-    // Note HTML (preserve newlines as <br>) - hidden by default
+
+    // Note HTML (preserve newlines as <br>)
     let noteHtml = '';
+    const isNoteVisible = window.isGlobalNotesOpen;
     if (item.note) {
         const safe = escapeHtml(item.note).replace(/\n/g, '<br>');
         // Use smaller font to match other card elements
-        noteHtml = `<div class="card-note mt-2 text-xs leading-snug text-gray-700 dark:text-gray-300 hidden" data-note-id="${itemId}">${safe}</div>`;
+        noteHtml = `<div class="card-note mt-2 text-xs leading-snug text-gray-700 dark:text-gray-300 ${isNoteVisible ? '' : 'hidden'}" data-note-id="${itemId}"><b>Note :</b> ${safe}</div>`;
     }
 
-    el.className = `bg-white dark:bg-gray-700 p-3 rounded-lg shadow-sm border-l-4 ${statusColor} cursor-grab hover:shadow-md hover:-translate-y-0.5 transition-all relative group select-none flex flex-col gap-1.5`;
+    el.className = `bg-white dark:bg-gray-700 p-3 rounded-lg shadow-sm border-2 border-black border-l-4 ${statusColor} cursor-grab hover:shadow-md hover:-translate-y-0.5 transition-all relative group select-none flex flex-col gap-1.5`;
     el.setAttribute('data-id', itemId);
     el.setAttribute('data-ma-thau', item.ma_thau);
 
@@ -186,7 +187,7 @@ function createCard(item) {
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
                 </button>
                 <button class="btn-toggle-note p-1 text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors rounded" title="Ghi chú">
-                    <svg class="w-3.5 h-3.5 transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                    <svg class="w-3.5 h-3.5 transform transition-transform ${isNoteVisible ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                 </button>
                 <div class="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-600 font-mono font-bold text-gray-700 dark:text-gray-200 border dark:border-gray-500">${item.ma_thau || 'N/A'}</div>
              </div>
@@ -252,19 +253,19 @@ function createCard(item) {
     el.querySelector('.btn-action-view').onclick = (e) => { e.stopPropagation(); onOpenModal(item, true); };
     if (canEdit) {
         const btnEdit = el.querySelector('.btn-action-edit');
-        if(btnEdit) btnEdit.onclick = (e) => { e.stopPropagation(); onOpenModal(item, false); };
-        
+        if (btnEdit) btnEdit.onclick = (e) => { e.stopPropagation(); onOpenModal(item, false); };
+
         const btnSubmit = el.querySelector('.btn-action-submit');
-        if(btnSubmit) btnSubmit.onclick = (e) => { e.stopPropagation(); onUpdateStatus(item.ma_thau, 'Waiting'); };
+        if (btnSubmit) btnSubmit.onclick = (e) => { e.stopPropagation(); onUpdateStatus(item.ma_thau, 'Waiting'); };
 
         const btnWin = el.querySelector('.btn-action-win');
-        if(btnWin) btnWin.onclick = (e) => { e.stopPropagation(); ListingWin.openWinModal(item.ma_thau, item.tinh_trang); };
-        
+        if (btnWin) btnWin.onclick = (e) => { e.stopPropagation(); ListingWin.openWinModal(item.ma_thau, item.tinh_trang); };
+
         const btnFail = el.querySelector('.btn-action-fail');
-        if(btnFail) btnFail.onclick = (e) => { e.stopPropagation(); onUpdateStatus(item.ma_thau, 'Fail'); };
+        if (btnFail) btnFail.onclick = (e) => { e.stopPropagation(); onUpdateStatus(item.ma_thau, 'Fail'); };
     }
     el.querySelector('.btn-action-history').onclick = (e) => { e.stopPropagation(); viewListingHistory(item.ma_thau); };
-    
+
     // Toggle Note visibility
     const btnToggleNote = el.querySelector('.btn-toggle-note');
     const noteDiv = el.querySelector('.card-note');
@@ -295,10 +296,10 @@ function createCard(item) {
             }
         };
     }
-    
+
     if (canDelete) {
         const btnDelete = el.querySelector('.btn-action-delete');
-        if(btnDelete) btnDelete.onclick = (e) => { e.stopPropagation(); onDeleteListing(item.ma_thau); };
+        if (btnDelete) btnDelete.onclick = (e) => { e.stopPropagation(); onDeleteListing(item.ma_thau); };
     }
 
     return el;
@@ -309,13 +310,13 @@ function calculateProgress(startDateStr, endDateStr) {
     const start = new Date(startDateStr);
     const end = new Date(endDateStr);
     const now = new Date();
-    start.setHours(0,0,0,0);
-    end.setHours(0,0,0,0);
-    now.setHours(0,0,0,0);
+    start.setHours(0, 0, 0, 0);
+    end.setHours(0, 0, 0, 0);
+    now.setHours(0, 0, 0, 0);
 
     const totalDuration = end.getTime() - start.getTime();
     const elapsed = now.getTime() - start.getTime();
-    
+
     if (totalDuration <= 0) return { percent: 100, daysLeft: 0, isExpired: true, text: t('lbl_expired') };
 
     let percent = (elapsed / totalDuration) * 100;
@@ -356,7 +357,7 @@ function initSortable() {
                 const maThau = itemEl.getAttribute('data-ma-thau');
 
                 if (!checkPermission('sua')) {
-                    if(window.fetchListings) window.fetchListings(true);
+                    if (window.fetchListings) window.fetchListings(true);
                     return;
                 }
 
@@ -365,7 +366,7 @@ function initSortable() {
 
                     if (oldStatus === 'Listing' && newStatus !== 'Waiting') {
                         showToast("Chỉ có thể chuyển hồ sơ Listing sang trạng thái Waiting (Nộp thầu).", "error");
-                        if(window.fetchListings) window.fetchListings(true); 
+                        if (window.fetchListings) window.fetchListings(true);
                         return;
                     }
 
@@ -387,7 +388,7 @@ function initSortable() {
 
 export function switchMobileTab(status) {
     document.querySelectorAll('.mobile-tab-btn').forEach(btn => {
-        if(btn.dataset.status === status) {
+        if (btn.dataset.status === status) {
             btn.className = `mobile-tab-btn flex-1 py-1.5 px-2 text-xs font-medium rounded text-center whitespace-nowrap transition-colors border border-blue-200 dark:border-blue-800 bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300`;
         } else {
             btn.className = `mobile-tab-btn flex-1 py-1.5 px-2 text-xs font-medium rounded text-center whitespace-nowrap transition-colors border border-transparent text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-700`;
@@ -396,7 +397,7 @@ export function switchMobileTab(status) {
 
     Object.keys(COLUMNS).forEach(key => {
         const colWrapper = document.getElementById(`col-wrapper-${key}`);
-        if(colWrapper) {
+        if (colWrapper) {
             if (key === status) {
                 colWrapper.classList.remove('hidden');
                 colWrapper.classList.add('flex');

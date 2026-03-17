@@ -581,10 +581,11 @@
             border-color: #4b5563;
         }
 
-        html.dark .handsontable td {
-            background-color: #1f2937;
-            color: #e5e7eb;
-            border-color: #4b5563;
+        html.dark .handsontable td,
+        html.dark .handsontable td.htDimmed {
+            background-color: #1f2937 !important;
+            color: #e5e7eb !important;
+            border-color: #4b5563 !important;
         }
 
         html.dark .handsontable tr:first-child th,
@@ -601,8 +602,9 @@
             background-color: #374151;
         }
 
-        html.dark .ht_master tr:nth-of-type(even)>td {
-            background-color: #27303f;
+        html.dark .handsontable tbody tr:nth-of-type(even)>td,
+        html.dark .handsontable tbody tr:nth-of-type(even)>td.htDimmed {
+            background-color: #27303f !important;
         }
 
         /* Handsontable SCROLLING FIXES FOR MOBILE */
