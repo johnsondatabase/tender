@@ -279,32 +279,49 @@ export async function showView(viewId, params = null) {
 
     currentView = viewId;
 
-    // OPTIMIZATION: Do NOT await the module execution.
-    // Allow the UI to switch immediately, then load data in the background.
-    // Using setTimeout to push execution to next event loop tick to allow UI repaint.
-    setTimeout(async () => {
-        try {
-            if (viewId === 'view-cai-dat') {
-                const { onShowCaiDatView } = await import('./caidat.js');
-                onShowCaiDatView();
-            } else if (viewId === 'view-ton-kho') {
-                const { onShowListingView } = await import('./listing.js');
-                onShowListingView();
-            } else if (viewId === 'view-chi-tiet') {
-                const { onShowDetailView } = await import('./detail.js');
-                onShowDetailView(params);
-            } else if (viewId === 'view-san-pham') {
-                const { onShowProductView } = await import('./product.js');
-                onShowProductView(params);
-            } else if (viewId === 'view-phat-trien') {
-                const { onShowDashboardView } = await import('./dashboard.js');
-                onShowDashboardView();
-            }
-        } catch (error) {
-            console.error(error);
-            showToast("Lỗi tải module: " + error.message, 'error');
-        }
-    }, 0);
+    // OPTIMIZATION: Use pre-loaded module cache when available, fallback to import() for first load
+    try {
+        const handlers = {
+            'view-cai-dat': () => viewModules.caidat ? viewModules.caidat.onShowCaiDatView() : import('./caidat.js').then(m => { viewModules.caidat = m; m.onShowCaiDatView(); }),
+            'view-ton-kho': () => viewModules.listing ? viewModules.listing.onShowListingView() : import('./listing.js').then(m => { viewModules.listing = m; m.onShowListingView(); }),
+            'view-chi-tiet': () => viewModules.detail ? viewModules.detail.onShowDetailView(params) : import('./detail.js').then(m => { viewModules.detail = m; m.onShowDetailView(params); }),
+            'view-san-pham': () => viewModules.product ? viewModules.product.onShowProductView(params) : import('./product.js').then(m => { viewModules.product = m; m.onShowProductView(params); }),
+            'view-phat-trien': () => viewModules.dashboard ? viewModules.dashboard.onShowDashboardView() : import('./dashboard.js').then(m => { viewModules.dashboard = m; m.onShowDashboardView(); }),
+        };
+        if (handlers[viewId]) await handlers[viewId]();
+    } catch (error) {
+        console.error(error);
+        showToast("Lỗi tải module: " + error.message, 'error');
+    }
+}
+
+// Cache for pre-loaded view modules (populated at app startup)
+const viewModules = {
+    caidat: null,
+    listing: null,
+    detail: null,
+    product: null,
+    dashboard: null,
+};
+
+// Pre-load all view modules in background so view switching is instant
+async function preloadViewModules() {
+    try {
+        const [caidat, listing, detail, product, dashboard] = await Promise.all([
+            import('./caidat.js'),
+            import('./listing.js'),
+            import('./detail.js'),
+            import('./product.js'),
+            import('./dashboard.js'),
+        ]);
+        viewModules.caidat = caidat;
+        viewModules.listing = listing;
+        viewModules.detail = detail;
+        viewModules.product = product;
+        viewModules.dashboard = dashboard;
+    } catch (e) {
+        console.error('Module preload error:', e);
+    }
 }
 
 function updateOnlineStatusUI() {
@@ -859,6 +876,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             const lastView = sessionStorage.getItem('lastViewId') || 'view-phat-trien';
             await showView(lastView);
 
+            // Pre-load all view modules in background for instant subsequent switches
+            preloadViewModules();
+
             userChannel = sb.channel('public:user')
                 .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'user', filter: 'gmail=eq.' + currentUser.gmail }, payload => {
                     const updatedUser = payload.new;
@@ -907,9 +927,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
                         // Update Profile UI dynamically if we are in Settings view
                         if (currentView === 'view-cai-dat') {
-                            import('./caidat.js').then(module => {
-                                if (module.onShowCaiDatView) module.onShowCaiDatView();
-                            });
+                            viewModules.caidat?.onShowCaiDatView();
                         }
                     }
                 })
@@ -930,7 +948,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             });
 
                             if (currentView === 'view-cai-dat') {
-                                import('./caidat.js').then(({ fetchUsers }) => fetchUsers());
+                                viewModules.caidat?.fetchUsers?.();
                             }
                         }
                     })
