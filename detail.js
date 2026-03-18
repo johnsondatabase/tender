@@ -96,18 +96,9 @@ export function onShowDetailView() {
     }
     const canExport = exportPermissions.includes('view-chi-tiet');
 
-    // If grid container exists, just refresh and return for instant view switch
+    // If grid container exists, just refresh layout and return instantly (Realtime keeps data fresh)
     if (container.querySelector('#hot-container')) {
-        // Trigger resize observer to fix Handsontable layout in tabs
-        setTimeout(() => {
-            if (hot) {
-                hot.getPlugin('autoRowSize').clearCache();
-                hot.refreshDimensions();
-            }
-        }, 50); // slight delay to ensure layout is visible
-
-        // Background refresh
-        fetchDetailData(true);
+        if (hot) hot.refreshDimensions();
         return;
     }
 

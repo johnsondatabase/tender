@@ -189,17 +189,11 @@ export function onShowProductView(params = null) {
         setLanguage(getCurrentLanguage());
         updateFilterButtonState();
 
-        setTimeout(() => {
-            if (hot) {
-                hot.getPlugin('autoRowSize').clearCache();
-                hot.refreshDimensions();
-            }
-        }, 50);
+        // Realtime subscription keeps data fresh — just fix layout & apply any pending filter
+        if (hot) hot.refreshDimensions();
 
         if (params && params.filterCode) {
             filterData(savedSearchKeyword);
-        } else {
-            fetchProductData(true);
         }
 
         document.removeEventListener('keydown', handleProductEscKey);
