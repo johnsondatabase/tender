@@ -602,8 +602,9 @@ function initHandsontable() {
         width: '100%',
         stretchH: 'all',
         fixedColumnsLeft: pinnedCount,
-        autoRowSize: true,
-        viewportRowRenderingOffset: 50, // Increased buffer
+        autoRowSize: false,
+        rowHeights: 28,
+        viewportRowRenderingOffset: 20, // Reduced - fixed row height enables true virtual scrolling
         viewportColumnRenderingOffset: 20, // Increased horizontal buffer for better sync
         manualColumnResize: true,
         manualRowResize: true,
