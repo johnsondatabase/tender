@@ -708,6 +708,193 @@
             background-color: #6b7280 !important;
         }
 
+        /* ===== HOT Filter Dropdown: Fix OK/Cancel cut-off & Mobile layout ===== */
+
+        /* Ép khung Menu chính (chứa toàn bộ từ Search đến Alignment) tự động dài ra */
+        .htDropdownMenu,
+        .htDropdownMenu>.ht_master,
+        .htDropdownMenu>.ht_master>.wtHolder,
+        .htDropdownMenu>.ht_master>.wtHolder>.wtSpreader {
+            height: auto !important;
+            max-height: none !important;
+            min-height: min-content !important;
+            overflow: visible !important;
+        }
+
+        /* ẨN cuộn ngang vô ích của HOT filter, ngăn nó chiếm mất không gian phía dưới của menu */
+        /* Giới hạn CỤC BỘ phần Checkbox list (phần cuộn list items) */
+        .htFiltersMenuValue .htUIMultipleSelectHot {
+            max-height: 150px !important;
+            height: auto !important;
+            overflow: hidden !important;
+            /* Prevent scrollbar spillage */
+        }
+
+        /* Giới hạn phần khung có Scrollbar chứa các checkbox */
+        .htFiltersMenuValue .htUIMultipleSelectHot .wtHolder {
+            max-height: 150px !important;
+            height: auto !important;
+            overflow-x: auto !important;
+            /* Cho phép cuộn ngang */
+            overflow-y: auto !important;
+            /* Cho phép cuộn dọc */
+        }
+
+        /* ÉP MENU LUÔN GIÃN THEO NỘI DUNG MÀ KHÔNG BỊ GIỚI HẠN CHIỀU CAO */
+        .htDropdownMenu,
+        .htDropdownMenu>.ht_master,
+        .htDropdownMenu>.ht_master table.htCore {
+            height: auto !important;
+            overflow: visible !important;
+        }
+
+        /* FIX TRIỆT ĐỂ LỖI CẮT NGANG NÚT OK/CANCEL */
+        .htDropdownMenu table tr td:has(.htFiltersMenuActionBar) {
+            height: auto !important;
+            min-height: 80px !important;
+            padding: 0 !important;
+            vertical-align: top !important;
+            overflow: visible !important;
+        }
+
+        .htDropdownMenu>.ht_master,
+        .htDropdownMenu>.ht_master>.wtHolder,
+        .htDropdownMenu>.ht_master>.wtHolder>.wtSpreader {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+        }
+
+        /* ---------------------------------------------------- */
+        /* STYLE CHO BỘ ĐẾM SỐ LƯỢNG (DÙNG THẺ SPAN INJECT QUA JS) */
+        .sel-count-badge {
+            font-size: 13px;
+            padding-left: 8px;
+            /* Tự động chiếm khoảng trống bên trái nếu row là flex (HOT mặc định dùng table-cell) */
+        }
+
+        /* ---------------------------------------------------- */
+
+        /* TĂNG CHIỀU RỘNG BỘ LỌC TRÊN DESKTOP */
+        @media (min-width: 768px) {
+            .htDropdownMenu {
+                min-width: 320px !important;
+            }
+
+            /* Ép toàn bộ nội dung bên trong giãn ra 100% để phủ kín bề ngang mới */
+            .htDropdownMenu table,
+            .htDropdownMenu .htUIInput,
+            .htDropdownMenu .htUIInput input,
+            .htDropdownMenu .htUISelect,
+            .htDropdownMenu .htUISelect select,
+            .htDropdownMenu .htUIMultipleSelectHot,
+            .htDropdownMenu .htUIMultipleSelectHot .wtHolder,
+            .htDropdownMenu .htUIMultipleSelectHot .wtHider,
+            .htDropdownMenu .htUIMultipleSelectHot .wtSpreader,
+            .htDropdownMenu .htUIMultipleSelectHot table {
+                width: 100% !important;
+                box-sizing: border-box !important;
+            }
+
+            /* Đảm bảo hàng và ô trong bảng chính của Filter trải rộng 100% */
+            .htDropdownMenu>.ht_master table.htCore {
+                width: 100% !important;
+            }
+        }
+
+        /* GIẢI PHÁP CĂN GIỮA TUYỆT ĐỐI (DÙNG display: contents ĐỂ PHÁ BẢNG) */
+        .htFiltersMenuActionBar table,
+        .htFiltersMenuActionBar tbody,
+        .htFiltersMenuActionBar tr,
+        .htFiltersMenuActionBar td {
+            display: contents !important;
+            /* Chỉ phá cấu trúc bảng bên trong, KHÔNG phá khung flex */
+        }
+
+        /* Khung Action Bar làm Flex Container chính */
+        .htFiltersMenuActionBar {
+            display: flex !important;
+            flex-direction: row !important;
+            justify-content: center !important;
+            align-items: center !important;
+            gap: 8px !important;
+            padding: 10px !important;
+            border-top: 1px solid #e5e7eb !important;
+            background: white !important;
+            min-height: 60px !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+            overflow: hidden !important;
+        }
+
+        /* STYLE NÚT OK/CANCEL GHI ĐÈ FLOAT */
+        .htDropdownMenu .htFiltersMenuActionBar .htUIBtn {
+            flex: 1 !important;
+            max-width: calc(50% - 4px) !important;
+            height: 38px !important;
+            line-height: normal !important;
+            padding: 0 !important;
+            font-size: 14px !important;
+            font-weight: 700 !important;
+            margin: 0 !important;
+            float: none !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            border-radius: 6px !important;
+            position: relative !important;
+            box-sizing: border-box !important;
+        }
+
+        html.dark .htFiltersMenuActionBar {
+            border-top: 1px solid #4b5563 !important;
+            background: #374151 !important;
+        }
+
+        /* Mobile-specific: compact filter dropdown */
+        @media (max-width: 767px) {
+
+            /* Limit width but don't touch left — HOT handles positioning */
+            .htDropdownMenu {
+                max-width: min(320px, calc(100vw - 16px)) !important;
+            }
+
+            /* Smaller fonts throughout filter */
+            .htDropdownMenu table tbody tr td,
+            .htDropdownMenu .htFiltersMenuLabel,
+            .htDropdownMenu .htUIMultipleSelectHot td,
+            .htDropdownMenu .htFiltersMenuValue .htUIInput input,
+            .htDropdownMenu .htUISelect select {
+                font-size: 11px !important;
+            }
+
+            /* Compact padding */
+            .htDropdownMenu table tbody tr td {
+                padding: 3px 6px !important;
+            }
+
+            /* Overrides for mobile height cap */
+            .htFiltersMenuValue .htUIMultipleSelectHot {
+                max-height: 120px !important;
+            }
+
+            .htFiltersMenuValue .htUIMultipleSelectHot .wtHolder {
+                max-height: 120px !important;
+            }
+
+            /* Compact OK/Cancel buttons */
+            .htDropdownMenu .htFiltersMenuActionBar .htUIBtn {
+                font-size: 11px !important;
+                padding: 4px 10px !important;
+            }
+
+            /* Search input compact */
+            .htDropdownMenu .htFiltersMenuValue .htUIInput input {
+                padding: 3px 6px !important;
+                height: 26px !important;
+            }
+        }
+
         .pin-active {
             color: #2563eb;
         }

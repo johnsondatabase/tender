@@ -9,6 +9,8 @@ let displayedData = []; // Filtered dataset
 let detailRealtimeChannel = null;
 let isDetailLoaded = false; // Caching flag
 let targetDateColumnIndex = null; // Track which column triggered the date filter
+let savedFilterState = []; // Persisted HOT filter conditions across data reloads
+let isRestoringFilters = false; // Flag to skip afterFilter save during restore
 
 // User Preferences Key
 const getStorageKey = () => `crm_user_settings_${currentUser ? currentUser.gmail : 'guest'}_detail_view`;
@@ -98,7 +100,11 @@ export function onShowDetailView() {
 
     // If grid container exists, just refresh layout and return instantly (Realtime keeps data fresh)
     if (container.querySelector('#hot-container')) {
-        if (hot) hot.refreshDimensions();
+        if (hot) {
+            hot.refreshDimensions();
+            // Explicitly re-apply saved HOT filters (refreshDimensions may reset visual filter state)
+            restoreFilters();
+        }
         return;
     }
 
@@ -621,7 +627,8 @@ function initHandsontable() {
                 saveUserSettings();
             }
         },
-        afterFilter: () => {
+        afterFilter: (conditionsStack) => {
+            if (!isRestoringFilters) savedFilterState = conditionsStack || []; // Save filter state (skip during restore)
             updateFilterButtonState();
             calculateHotTotals();
         },
@@ -650,13 +657,120 @@ function initHandsontable() {
                     openUsedModal(rowData);
                 }
             }
+        },
+        afterDropdownMenuShow: function (dropdownObj) {
+            const dropdownContainer = dropdownObj.menu.container;
+            if (!dropdownContainer) return;
+
+            const updateCount = () => {
+                // Create or find badge next to the 'Clear' button
+                const controls = dropdownContainer.querySelectorAll('.htUISelectionControls');
+                if (controls.length === 0) return;
+                const clearBtn = controls.length > 1 ? controls[1] : controls[0]; // Usually 2nd is Clear
+
+                let badge = dropdownContainer.querySelector('.sel-count-badge');
+                if (!badge) {
+                    badge = document.createElement('span');
+                    badge.className = 'sel-count-badge';
+                    badge.style.fontWeight = 'bold';
+                    badge.style.color = document.documentElement.classList.contains('dark') ? '#60a5fa' : '#2563eb';
+                    badge.style.pointerEvents = 'none';
+
+                    // CĂN TRÁI SỐ ĐẾM: Đẩy sang bên trái cùng hàng
+                    badge.style.float = 'left';
+                    badge.style.marginRight = 'auto'; // Cho flex container nếu có
+                    badge.style.paddingLeft = '6px';
+
+                    // Nhét badge lên đầu tiên (trước Select All)
+                    const firstBtn = controls[0];
+                    firstBtn.parentNode.insertBefore(badge, firstBtn);
+                }
+
+                let checkedCount = 0;
+                let isAccurate = false;
+
+                try {
+                    const comp = hot.getPlugin('filters').components.get('filter_by_value');
+                    const ms = comp ? (comp.multipleSelect || (comp.elements ? comp.elements[0] : null)) : null;
+
+                    if (ms && typeof ms.getItems === 'function') {
+                        const items = ms.getItems();
+                        if (items && items.length) {
+                            checkedCount = items.filter(i => i.checked === true || i.checked === 'true').length;
+                            isAccurate = true;
+                        }
+                    }
+
+                    if (!isAccurate && ms && ms.hot && typeof ms.hot.getData === 'function') {
+                        const data = ms.hot.getData();
+                        if (data && data.length) {
+                            // In HOT, multiple select data is either array: [true, 'val'] or obj: {checked: true}
+                            checkedCount = data.filter(r => r[0] === true || r[0] === 'true' || r.checked === true || r.checked === 'true').length;
+                            isAccurate = true;
+                        }
+                    }
+                } catch (e) { }
+
+                if (!isAccurate) {
+                    const chkContainer = dropdownContainer.querySelector('.htUIMultipleSelectHot');
+                    if (chkContainer) checkedCount = chkContainer.querySelectorAll('input[type="checkbox"]:checked').length;
+                }
+
+                if (checkedCount > 0) badge.textContent = `(${checkedCount})`;
+                else badge.textContent = '';
+            };
+
+            setTimeout(updateCount, 10);
+            setTimeout(updateCount, 100);
+
+            if (!dropdownContainer.dataset.hasCountListener) {
+                // Listen to ALL mousedown events inside the dropdown container
+                // This captures clicks on checkboxes even if HOT stops propagation!
+                dropdownContainer.addEventListener('mousedown', (e) => {
+                    if (e.target.closest('.htUIMultipleSelectHot') || e.target.closest('.htUISelectionControls')) {
+                        setTimeout(updateCount, 10);
+                        setTimeout(updateCount, 50); // Give HOT enough time to toggle the internal bool state
+                        setTimeout(updateCount, 150); // Safety net
+                    }
+                });
+
+                // Keep the afterChange hook if possible, it's harmless
+                try {
+                    const comp = hot.getPlugin('filters').components.get('filter_by_value');
+                    const ms = comp ? (comp.multipleSelect || (comp.elements ? comp.elements[0] : null)) : null;
+                    if (ms && ms.hot && !ms.hot.__countHookInstalled) {
+                        ms.hot.addHook('afterChange', updateCount);
+                        ms.hot.__countHookInstalled = true;
+                    }
+                } catch (e) { }
+
+                dropdownContainer.dataset.hasCountListener = 'true';
+            }
         }
     });
 }
 
+function restoreFilters() {
+    if (!hot || !savedFilterState.length) return;
+    const filtersPlugin = hot.getPlugin('filters');
+    if (!filtersPlugin) return;
+    isRestoringFilters = true;
+    filtersPlugin.clearConditions();
+    savedFilterState.forEach(({ column, conditions, operation }) => {
+        if (conditions && conditions.length) {
+            conditions.forEach(({ name, args }) =>
+                filtersPlugin.addCondition(column, name, args, operation)
+            );
+        }
+    });
+    filtersPlugin.filter();
+    isRestoringFilters = false;
+}
+
 function updateTableData() {
     if (!hot) return;
-    hot.loadData(displayedData);
+    // updateData() preserves HOT filter/sort state (unlike loadData which resets them)
+    hot.updateData(displayedData);
     updateFooterInfo(displayedData.length);
     calculateHotTotals();
     updateFilterButtonState();
